@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Account</title>
+  <link rel="stylesheet" href="/activate/register/styles.css" />
+</head>
+<body>
+  <div class="bg" aria-hidden="true"></div>
+  <div class="noise" aria-hidden="true"></div>
+
+  <main class="wrap" role="main" aria-labelledby="t">
+    <section class="card">
+      <div class="top">
+        <div class="mark" aria-hidden="true">◇</div>
+        <div>
+          <h1 id="t">Account</h1>
+          <p class="lead">Log in, register, or recover with your private User ID.</p>
+        </div>
+        <button id="back" class="btn ghost" type="button">Back</button>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Account tabs">
+        <button class="tab" id="tab-login" aria-selected="true" type="button">Login</button>
+        <button class="tab" id="tab-register" aria-selected="false" type="button">Register</button>
+        <button class="tab" id="tab-recover" aria-selected="false" type="button">Recover</button>
+      </div>
+
+      <section id="panel-login" class="panel" aria-labelledby="tab-login">
+        <div class="grid2">
+          <div class="field">
+            <label for="login-user">Username</label>
+            <input id="login-user" placeholder="Username" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="login-pass">Password</label>
+            <input id="login-pass" type="password" placeholder="Password" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="login-btn" class="btn primary">Login</button>
+        </div>
+
+        <div class="msg" id="login-msg" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="panel-register" class="panel" aria-labelledby="tab-register" hidden>
+        <div class="grid2">
+          <div class="field">
+            <label for="reg-user">Username</label>
+            <input id="reg-user" placeholder="Username" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="reg-email">Email</label>
+            <input id="reg-email" placeholder="Email" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label for="reg-pass">Password</label>
+            <input id="reg-pass" type="password" placeholder="Password" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="reg-pass2">Confirm Password</label>
+            <input id="reg-pass2" type="password" placeholder="Confirm password" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="checks">
+          <label class="check">
+            <input id="reg-emails" type="checkbox" checked />
+            <span>I would like to receive emails when updates release</span>
+          </label>
+          <label class="check">
+            <input id="reg-consent" type="checkbox" />
+            <span>I consent to the <a href="/agreement" target="_blank" rel="noopener">agreement</a></span>
+          </label>
+        </div>
+
+        <div class="row">
+          <button id="reg-btn" class="btn primary">Create Account</button>
+        </div>
+
+        <div class="msg" id="reg-msg" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="panel-recover" class="panel" aria-labelledby="tab-recover" hidden>
+        <div class="callout">
+          <div class="callout-title">Recovery</div>
+          <div class="callout-text">
+            Recovery uses your <b>private</b> User ID. If you don’t have it, you cannot recover.
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label for="rec-id">User ID</label>
+            <input id="rec-id" placeholder="eX5G33PtT2Q9lJ6f" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="rec-pass">New Password</label>
+            <input id="rec-pass" type="password" placeholder="New password" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="rec-btn" class="btn primary">Set New Password</button>
+        </div>
+
+        <div class="msg" id="rec-msg" role="status" aria-live="polite"></div>
+      </section>
+
+      <div class="footer">
+        <div class="footer-note">Tip: You’ll find your User ID later in your profile under <b>/divine/profile</b>.</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/activate/register/script.js"></script>
+</body>
+</html>
