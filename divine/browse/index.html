@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Browse</title>
+  <link rel="icon" href="/divine/assets/divine-fav.png" />
+  <link rel="stylesheet" href="/divine/styles.css" />
+  <style>
+    .browse-main {
+      max-width: 700px;
+      margin: 48px auto 0;
+      padding: 26px 18px 48px;
+    }
+    .browse-title {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      margin: 0 0 18px;
+      text-align: center;
+      color: var(--gold);
+      text-shadow: 0 1px 8px rgba(255,255,255,0.08), 0 6px 24px #43206b60;
+    }
+    .browse-list {
+      display: flex;
+      flex-direction: column;
+      gap: 30px;
+      margin: 50px 0 0;
+      align-items: stretch;
+      padding: 0 4vw;
+    }
+    .browse-link {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      background: linear-gradient(135deg, #e3b43a 20%, #a34bff 70%, #6d2bd6 100%);
+      box-shadow: 0 10px 34px rgba(0,0,0,0.33);
+      border-radius: 17px;
+      font-size: 1.16rem;
+      font-weight: 800;
+      color: #fff;
+      min-height: 74px;
+      text-decoration: none;
+      padding: 0 32px;
+      transition: transform .14s cubic-bezier(.32,1.3,.58,.97), box-shadow .14s;
+      letter-spacing: 0.035em;
+      outline: none;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+    }
+    .browse-link:hover,
+    .browse-link:focus {
+      transform: translateY(-3px) scale(1.035);
+      box-shadow: 0 18px 52px rgba(79,56,168,.39), 0 6px 18px rgba(0,0,0,0.22);
+      background: linear-gradient(135deg, #a34bff 10%, #e3b43a 85%, #e3b43a 100%);
+      color: #fff;
+      text-decoration: underline;
+      z-index: 2;
+    }
+    @media (max-width: 600px) {
+      .browse-main { padding: 12px 2vw; }
+      .browse-list { gap: 16px; padding: 0; }
+      .browse-link { font-size: 1rem; min-height: 54px; padding: 0 10vw; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Protect with cookie check -->
+  <script>
+    (function(){
+      try {
+        var has = document.cookie.split(';').some(function(c){ return c.trim().indexOf('divine_access=') === 0; });
+      } catch (e) {
+        var has = false;
+      }
+      if (!has) {
+        location.replace('/404.html' + location.search + location.hash);
+      }
+    })();
+  </script>
+
+  <main class="browse-main" role="main">
+    <h1 class="browse-title">Select your browser</h1>
+    <nav class="browse-list" aria-label="Browser selection">
+      <a class="browse-link" href="/divine/browse/aurora/" tabindex="0">Divine Browse</a>
+      <a class="browse-link" href="/divine/browse/aurora-g1/" tabindex="0">Interstellar</a>
+      <a class="browse-link" href="/divine/browse/aurora-g2/" tabindex="0">Ultraviolet</a>
+      <a class="browse-link" href="/divine/browse/rammerhead/" tabindex="0">Rammerhead</a>
+      <!-- Add more as needed! -->
+    </nav>
+  </main>
+  <script src="/divine/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Remove Access — Divine</title>
+  <style>
+    :root{--bg:#071428;--white:#fff}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--white)}
+    .card{max-width:92%;padding:26px;border-radius:12px;text-align:center}
+    .msg{font-weight:700;margin-top:10px}
+  </style>
+</head>
+<body>
+  <div class="card" role="main" aria-live="polite">
+    <div class="msg" id="msg">Removing access and redirecting…</div>
+  </div>
+
+<script>
+(function(){
+  // Cookie name & path used by the gate
+  var COOKIE_NAME = 'divine_access';
+  var COOKIE_PATH = '/divine';
+
+  function deleteCookie(name, path) {
+    // Set cookie with a past expiry to remove it. Must match path used when setting.
+    var cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=' + (path || '/') + '; SameSite=Strict';
+    document.cookie = cookie;
+  }
+
+  // Remove cookie at /divine (the gate sets path=/divine). Also try root path for safety.
+  deleteCookie(COOKIE_NAME, COOKIE_PATH);
+  deleteCookie(COOKIE_NAME, '/');
+
+  // Clear gate-related localStorage keys used by root/index.html
+  try {
+    localStorage.removeItem('divine_failed_attempts');
+    localStorage.removeItem('divine_lock_until');
+  } catch (e) { /* ignore if localStorage disabled */ }
+
+  // Friendly UX: show confirmation briefly, then send user to the site root (index.html).
+  var msg = document.getElementById('msg');
+  msg.textContent = 'Access removed. Redirecting to homepage…';
+
+  // Use replace so this page won't stay in history
+  setTimeout(function(){
+    location.replace('/index.html');
+  }, 700);
+})();
+</script>
+</body>
+</html>

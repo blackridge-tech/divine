@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Games — Divine</title>
+  <link rel="icon" href="/divine/assets/divine-fav.png" />
+  <link rel="stylesheet" href="/divine/styles.css" />
+
+  <style>
+    .games-main {
+      max-width: 1080px;
+      margin: 40px auto;
+      padding: 26px 18px 46px;
+    }
+    .games-title {
+      font-size: 2.15rem;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      margin: 0 0 18px;
+      text-align: center;
+      color: var(--gold);
+      text-shadow: 0 1px 8px rgba(255,255,255,0.08), 0 6px 24px #43206b60;
+    }
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 32px;
+      margin-top: 20px;
+      justify-items: center;
+    }
+    .game-card {
+      background: linear-gradient(135deg, #201a32 45%, #a867ff 98%, #fed345 100%);
+      border-radius: 19px;
+      box-shadow: 0 10px 38px rgba(0,0,0,0.43), 0 1.5px 4px rgba(220,210,60,0.12);
+      overflow: hidden;
+      width: 100%;
+      max-width: 395px;
+      transition: transform .16s cubic-bezier(.33,1.13,.51,.87), box-shadow .16s;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      cursor: pointer;
+      position: relative;
+    }
+    .game-card:hover {
+      transform: translateY(-5px) scale(1.043);
+      box-shadow: 0 24px 60px rgba(79,56,168,0.44), 0 6px 22px rgba(0,0,0,0.32);
+      z-index: 2;
+    }
+    .game-img {
+      width: 100%;
+      display: block;
+      aspect-ratio: 16/9;
+      background: rgba(40,38,58,0.96);
+      object-fit: cover;
+      min-height: 150px;
+      max-height: 245px;
+      border-bottom: 2px solid rgba(255,255,255,0.03);
+    }
+    .game-title {
+      font-size: 1.28rem;
+      font-weight: 800;
+      letter-spacing: 0.015em;
+      margin: 0;
+      padding: 22px 26px 14px 24px;
+      color: #fff;
+      text-align: left;
+      flex: none;
+      text-shadow: 0 2px 11px rgba(160,144,252,0.13);
+    }
+    @media (max-width: 640px) {
+      .games-main { padding: 12px 2vw; }
+      .games-grid { gap: 16px; }
+      .game-card { max-width: 96vw; }
+      .game-title { padding: 17px 6vw 12px 4vw; font-size: 1.00rem; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Protect with cookie check -->
+  <script>
+    (function(){
+      try {
+        var has = document.cookie.split(';').some(function(c){ return c.trim().indexOf('divine_access=') === 0; });
+      } catch (e) {
+        var has = false;
+      }
+      if (!has) {
+        location.replace('/404.html' + location.search + location.hash);
+      }
+    })();
+  </script>
+
+  <div class="games-main">
+    <header>
+      <h1 class="games-title">Divine Games</h1>
+      <p class="tagline" style="text-align:center; margin-bottom:30px; margin-top:3px; color:var(--gold); opacity:.97; font-size:1.09rem; font-weight:600;">
+        Explore & play! More games coming soon.
+      </p>
+    </header>
+    <section class="games-grid">
+      <!-- Nut Simulator -->
+      <div class="game-card" tabindex="0" aria-label="Nut Simulator" onclick="window.location.href='/game/nut-sim'" onkeydown="if(event.key==='Enter'||event.key===' '){window.location.href='/game/nut-sim'}">
+        <img class="game-img" src="/divine/assets/nut-simulator.png" alt="Nut Simulator Image" loading="lazy" />
+        <div class="game-title">Nut Simulator</div>
+      </div>
+      <!-- Beyond Rare X -->
+      <div class="game-card" tabindex="0" aria-label="Beyond Rare X" onclick="window.location.href='/divine/games/game/beyond-rare-x'" onkeydown="if(event.key==='Enter'||event.key===' '){window.location.href='/game/beyond-rare-x'}">
+        <img class="game-img" src="/divine/assets/beyond-rare-x.png" alt="Beyond Rare X Image" loading="lazy" />
+        <div class="game-title">Beyond Rare X</div>
+      </div>
+      <!-- Beyond Rare Y -->
+      <div class="game-card" tabindex="0" aria-label="Beyond Rare X" onclick="window.location.href='/divine/games/game/beyond-rare-y'" onkeydown="if(event.key==='Enter'||event.key===' '){window.location.href='/game/beyond-rare-x'}">
+        <img class="game-img" src="/divine/assets/beyond-rare-x.png" alt="Beyond Rare Y Image" loading="lazy" />
+        <div class="game-title">Beyond Rare Y</div>
+      </div>
+      <!-- Add more cards below as you add games! 
+        You can copy the div below and set the href in onclick and onkeydown:
+        <div class="game-card" tabindex="0" aria-label="GAME_NAME" onclick="window.location.href='/game/YOUR_PATH'" onkeydown="if(event.key==='Enter'||event.key===' '){window.location.href='/game/YOUR_PATH'}">
+      -->
+    </section>
+  </div>
+  <script src="/divine/panel-client.js"></script>
+  <script src="/divine/access-client.js"></script>
+</body>
+</html>

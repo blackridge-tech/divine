@@ -1,1 +1,1 @@
-# divine-dynamic
+# divine

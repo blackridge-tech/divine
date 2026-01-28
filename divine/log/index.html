@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Update Log — Divine</title>
+
+  <!-- Early cookie check: redirect to 404 if no divine_access cookie -->
+  <script>
+  (function(){
+    try {
+      var has = document.cookie.split(';').some(function(c){ return c.trim().indexOf('divine_access=') === 0; });
+    } catch (e) {
+      var has = false;
+    }
+    if (!has) {
+      location.replace('/404.html' + location.search + location.hash);
+    }
+  })();
+  </script>
+
+  <link rel="icon" href="/divine/assets/divine-fav.png" />
+  <link rel="stylesheet" href="/divine/styles.css" />
+</head>
+<body>
+  <!-- Announcement banner -->
+  <div class="announcement" role="banner" aria-live="polite">
+    We've just opened! Have a divine experience!
+  </div>
+
+  <main class="container" id="main" role="main">
+    <!-- Theme toggle -->
+    <button id="theme-toggle" class="theme-toggle" aria-pressed="true" aria-label="Toggle theme">☀️</button>
+
+    <!-- Title area -->
+    <header class="title-area" role="heading" aria-level="1">
+      <h1 class="site-title">Update Log</h1>
+      <p class="tagline">Version history and release notes</p>
+    </header>
+
+    <!-- Content -->
+    <section style="max-width:820px; width:100%; text-align:left; color:var(--gold);">
+      <article style="background:transparent; padding:18px 0;">
+        <p style="font-weight:800; margin:0 0 12px;">Version 1.0.0, Released on December 29, 2025:</p>
+        <p style="margin:0 0 6px; font-weight:600;">bruh</p>
+      </article>
+    </section>
+
+    <div class="meta">
+      <div class="version">Site Version: 1.0.0</div>
+    </div>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <!-- keep footer minimal to match site style -->
+  </footer>
+
+  <script src="/divine/script.js"></script>
+</body>
+</html>

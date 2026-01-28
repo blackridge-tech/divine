@@ -1,0 +1,218 @@
+:root{
+  --gold: #FFD700;           /* bright gold */
+  --banner-blue: #238FD9;    /* darker sky-blue for banner & light-mode buttons */
+  --light-bg: #ffffff;
+  --dark-bg: #000000;
+  --tile-radius: 14px;
+  --tile-padding: 14px 28px;
+  --banner-height: 64px;
+  --max-width: 980px;
+  --gap: 22px;
+  --purple-bright: #9b59ff;
+  --gold-bright: #FFD54F;
+}
+
+/* Reset and base */
+* { box-sizing: border-box; }
+html,body{ height:100%; margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color:var(--gold); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+a{ text-decoration:none; color:inherit; }
+
+/* Announcement banner: full width, sticky at top */
+.announcement{
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--banner-height);
+  background: var(--banner-blue);
+  color: var(--gold);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  letter-spacing:0.6px;
+  font-size:1.05rem;
+  z-index:80;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  border-radius: 0; /* NO rounded corners */
+}
+
+/* Main container centered */
+.container{
+  max-width: var(--max-width);
+  margin: 20px auto 0;
+  padding: 24px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap: var(--gap);
+  position: relative;
+  z-index: 10;
+}
+
+/* Theme toggle (in normal flow so it won't overlap banner) */
+.theme-toggle{
+  align-self: flex-start;
+  width:48px;
+  height:48px;
+  font-size:20px; /* makes emoji slightly smaller */
+  line-height:1;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+  margin-left: 8px; /* slight inset from left edge of container */
+}
+.theme-toggle:focus { outline: 3px solid rgba(255,215,0,0.18); outline-offset: 3px; }
+.theme-toggle:active { transform: scale(.98); }
+
+/* Title and tagline (centered) */
+.title-area { text-align:center; margin-top:6px; }
+.site-title { margin:0; font-size:2rem; color:var(--gold); font-weight:800; letter-spacing:0.2px; }
+.brand { font-style: normal; } /* normal font as requested */
+.tagline { margin:8px 0 0; color:var(--gold); opacity:0.95; font-weight:600; }
+
+/* Grid layout: 3x3, variable-width tiles */
+.grid{
+  display:grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 18px;
+  justify-content:center;
+  align-items:center;
+  width:100%;
+}
+
+/* Tile styles - text only, variable width */
+.tile{
+  display:inline-block;
+  padding: var(--tile-padding);
+  border-radius: 12px;
+  font-size:1.15rem;
+  font-weight:800;
+  color: white;
+  text-align:center;
+  min-width: 90px;
+  white-space: nowrap;
+  transition: transform .14s ease, box-shadow .14s ease;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+/* Hover: subtle purple glow */
+.tile:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 24px 46px rgba(107, 33, 168, 0.42), 0 6px 18px rgba(0,0,0,0.28);
+}
+
+/* Meta / version */
+.meta { width:100%; display:flex; justify-content:center; }
+.version { color:var(--gold); font-weight:700; margin-top:8px; }
+
+/* Footer disclaimer close below version */
+.site-footer { padding: 18px 20px 36px; text-align:center; }
+.disclaimer { color:#ff0000; max-width: var(--max-width); margin: 8px auto 0; font-size:0.95rem; line-height:1.3; }
+
+/* LIGHT THEME */
+:root.light {
+  --page-bg: var(--light-bg);
+}
+
+/* Light-mode body */
+:root.light body, :root.light {
+  background: var(--light-bg);
+  color: var(--gold);
+}
+
+/* Light-mode buttons: sky-blue gradient like banner */
+:root.light .tile{
+  background: linear-gradient(135deg, #2a92d3, #4fb0e5);
+  color: white;
+  box-shadow: 0 10px 30px rgba(47,119,153,0.12);
+}
+
+/* Dark theme (default applied by JS) */
+:root.dark {
+  --page-bg: var(--dark-bg);
+}
+:root.dark body, :root.dark {
+  background: var(--dark-bg);
+  color: var(--gold);
+}
+
+/* Dark-mode buttons: more purple presence */
+:root.dark .tile{
+  background: linear-gradient(135deg, #e3b43a 12%, #a34bff 55%, #6d2bd6 100%);
+  color: white;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.6);
+}
+
+/* Background stars and subtle movement (dark theme only) */
+:root.dark body::before,
+:root.dark body::after{
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-repeat: repeat;
+  mix-blend-mode: screen;
+}
+
+/* Layer 1: dense small stars that twinkle */
+:root.dark body::before{
+  background-image:
+    radial-gradient(white 0.7px, rgba(255,255,255,0) 1px),
+    radial-gradient(white 0.6px, rgba(255,255,255,0) 1px);
+  background-size: 180px 180px, 260px 260px;
+  animation: twinkle 6s linear infinite, driftA 20s linear infinite;
+  opacity: 0.9;
+}
+
+/* Layer 2: sparse larger stars that twinkle off-set */
+:root.dark body::after{
+  background-image:
+    radial-gradient(white 1.2px, rgba(255,255,255,0) 1px),
+    radial-gradient(white 0.9px, rgba(255,255,255,0) 1px);
+  background-size: 420px 420px, 720px 720px;
+  animation: twinkle 9s linear infinite, driftB 28s linear infinite;
+  opacity: 0.75;
+}
+
+/* Twinkle: fades in/out (stars also drift) */
+@keyframes twinkle {
+  0% { opacity: 0.45; transform: translateZ(0); }
+  40% { opacity: 0.95; }
+  100% { opacity: 0.45; }
+}
+
+/* Slow drifting movement via background-position shift */
+@keyframes driftA {
+  0% { background-position: 0 0, 0 0; }
+  50% { background-position: -80px 60px, 60px -40px; }
+  100% { background-position: 0 0, 0 0; }
+}
+@keyframes driftB {
+  0% { background-position: 0 0, 0 0; }
+  50% { background-position: 120px -80px, -90px 70px; }
+  100% { background-position: 0 0, 0 0; }
+}
+
+/* Ensure header, container, footer draw above stars */
+.announcement, .container, .site-footer { position: relative; z-index: 10; }
+
+/* Small visual tweaks */
+.tile { border: none; }
+
+/* Accessibility focus */
+a:focus, button:focus { outline-offset: 3px; }
+
+/* Desktop-first. Keep layout centered on smaller widths too. */
+@media (max-width: 860px){
+  .grid { grid-template-columns: repeat(2, auto); gap: 14px; }
+}
+@media (max-width: 520px){
+  .grid { grid-template-columns: repeat(1, auto); }
+  .theme-toggle { width:44px; height:44px; font-size:18px; margin-left:6px; }
+}

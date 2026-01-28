@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shortcut Settings — Divine</title>
+  <link rel="icon" href="/divine/assets/divine-fav.png" />
+  <link rel="stylesheet" href="/divine/styles.css" />
+
+  <style>
+    /* Dark-mode styling to match the site's default dark appearance */
+    :root {
+      --card-bg: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.007));
+      --panel-bg: rgba(12,14,18,0.64);
+      --input-bg: rgba(255,255,255,0.02);
+      --input-border: rgba(255,255,255,0.04);
+      --muted-gold: rgba(255,215,0,0.9);
+      --gold-strong: #FFD700;
+      --shadow: 0 12px 34px rgba(0,0,0,0.55);
+    }
+
+    html,body {
+      height:100%;
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: var(--dark-bg, #000); /* fall back */
+      color: var(--gold-strong);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      padding: 28px 20px;
+    }
+
+    .settings-wrap {
+      max-width: 880px;
+      margin: 20px auto;
+      padding: 28px;
+      background: var(--card-bg);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      color: var(--gold-strong);
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+
+    h1 { margin: 0 0 8px; font-size: 1.6rem; }
+    p.lead { margin: 0 0 18px; color: var(--muted-gold); font-weight: 600; }
+
+    .row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+    label { display:block; font-weight:700; margin-bottom:6px; color: var(--gold-strong); }
+    .small { font-size:0.9rem; color: var(--muted-gold); }
+
+    .key-input {
+      width:140px;
+      font-size:1.1rem;
+      padding:12px 10px;
+      border-radius:10px;
+      background: var(--input-bg);
+      border:1px solid var(--input-border);
+      color:var(--gold-strong);
+      text-align:center;
+      letter-spacing:0.06em;
+      caret-color: var(--gold-strong);
+    }
+
+    .url-input {
+      flex:1 1 360px;
+      min-width:200px;
+      padding:12px 14px;
+      border-radius:10px;
+      background: var(--input-bg);
+      border:1px solid var(--input-border);
+      color:var(--gold-strong);
+    }
+
+    .mods { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .mods label { display:inline-flex; align-items:center; gap:8px; font-weight:700; cursor:pointer; color:var(--gold-strong); }
+    .mods input[type="checkbox"] { width:18px; height:18px; accent-color: #4fb0e5; }
+
+    .actions { display:flex; gap:12px; margin-top:12px; }
+    .btn {
+      padding:10px 14px;
+      background: linear-gradient(180deg, #2a92d3, #4fb0e5);
+      border-radius:10px;
+      color:white;
+      font-weight:800;
+      border:none;
+      cursor:pointer;
+      box-shadow: 0 8px 20px rgba(47,119,153,0.12);
+    }
+    .btn.ghost {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.06);
+      color: var(--gold-strong);
+    }
+
+    .note { margin-top:10px; color:var(--muted-gold); font-weight:700; }
+    .status { margin-top:12px; font-weight:800; color:#9be3a8; }
+
+    .error { color:#ff6b6b; font-weight:800; margin-top:8px; }
+
+    /* Adjust focus styles to be visible on dark background */
+    input:focus, button:focus { outline: 3px solid rgba(255,215,0,0.12); outline-offset: 3px; }
+
+    @media (max-width:640px){
+      .row { flex-direction:column; align-items:stretch; }
+      .key-input { width:100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="settings-wrap" role="main" aria-labelledby="t">
+    <h1 id="t">Shortcut Settings</h1>
+    <p class="lead">Configure a single keyboard shortcut that opens a URL or the Divine home. Press Save to persist.</p>
+
+    <form id="form" autocomplete="off" onsubmit="return false;" aria-describedby="help">
+      <div class="row">
+        <div>
+          <label for="key">Shortcut key</label>
+          <input id="key" class="key-input" type="text" inputmode="none" aria-label="Shortcut key"
+                 placeholder="Press a single key" maxlength="16" />
+          <div class="small">Enter a single letter, number, or symbol. Do not enter Ctrl/Alt/Shift/Search here — use the checkboxes below.</div>
+        </div>
+
+        <div style="flex:1; min-width:220px;">
+          <label for="url">Target URL (optional)</label>
+          <input id="url" class="url-input" type="text" placeholder="https://example.com or github.com — leave empty to go to Divine home" aria-label="Target URL" />
+          <div class="small">If left empty the shortcut will navigate to /divine/ (home).</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="mods" role="group" aria-label="Modifier keys">
+          <label><input id="mod-ctrl" type="checkbox" /> Ctrl</label>
+          <label><input id="mod-alt" type="checkbox" /> Alt</label>
+          <label><input id="mod-shift" type="checkbox" /> Shift</label>
+          <label><input id="mod-search" type="checkbox" /> Search</label>
+          <label title="Remove the divine_access cookie when the shortcut triggers (recommended)">
+            <input id="mod-remove" type="checkbox" /> Remove access upon activation (recommended)
+          </label>
+        </div>
+      </div>
+
+      <div class="actions" aria-hidden="false">
+        <button id="save" class="btn" type="button">Save Shortcut</button>
+        <button id="clear" class="btn ghost" type="button">Clear Shortcut</button>
+        <button id="test" class="btn ghost" type="button">Test Now</button>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+      <div id="err" class="error" role="alert" hidden></div>
+
+      <div id="help" class="note">To set the key: click the Shortcut key box and press a single non-modifier key. Modifiers must be selected via the checkboxes.</div>
+    </form>
+  </main>
+
+<script>
+(function(){
+  // Storage key
+  const STORAGE_KEY = 'divine.settings.shortcut';
+
+  // Elements
+  const keyInput = document.getElementById('key');
+  const urlInput = document.getElementById('url');
+  const modCtrl = document.getElementById('mod-ctrl');
+  const modAlt = document.getElementById('mod-alt');
+  const modShift = document.getElementById('mod-shift');
+  const modSearch = document.getElementById('mod-search');
+  const modRemove = document.getElementById('mod-remove');
+
+  const saveBtn = document.getElementById('save');
+  const clearBtn = document.getElementById('clear');
+  const testBtn = document.getElementById('test');
+  const status = document.getElementById('status');
+  const err = document.getElementById('err');
+
+  // Forbidden keys for the single-key field (modifiers)
+  const FORBIDDEN = new Set(['Control','Ctrl','Shift','Alt','Meta','OS','Search','AltGraph']);
+
+  // Utility: load settings
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Utility: save settings
+  function save(obj) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+  }
+
+  // Utility: clear settings
+  function clearSettings() {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  // Populate form with saved values
+  function populate() {
+    const s = load();
+    if (!s) return;
+    keyInput.value = s.key || '';
+    urlInput.value = s.url || '';
+    modCtrl.checked = !!s.ctrl;
+    modAlt.checked = !!s.alt;
+    modShift.checked = !!s.shift;
+    modSearch.checked = !!s.search;
+    modRemove.checked = !!s.removeAccess;
+    showStatus('Loaded saved shortcut.');
+  }
+
+  // Show status message briefly
+  let statusTimer = 0;
+  function showStatus(msg) {
+    clearTimeout(statusTimer);
+    status.hidden = false;
+    status.textContent = msg;
+    err.hidden = true;
+    statusTimer = setTimeout(() => { status.hidden = true; }, 3200);
+  }
+  function showError(msg) {
+    clearTimeout(statusTimer);
+    err.hidden = false;
+    err.textContent = msg;
+  }
+
+  // Validate key field: must be a single printable character (length 1) and not a modifier.
+  function validateKey(k) {
+    if (!k) return { ok:false, reason: 'Shortcut key required.' };
+    // Use the literal entered string trimmed
+    const v = String(k).trim();
+    if (!v) return { ok:false, reason: 'Shortcut key required.' };
+    // Block modifier names (user should use checkboxes)
+    if (FORBIDDEN.has(v) || FORBIDDEN.has(v.replace(/^Key/, ''))) {
+      return { ok:false, reason: 'Enter a non-modifier key (letter, number or symbol).' };
+    }
+    // Prefer single-character keys for this UI
+    if (v.length !== 1) {
+      return { ok:false, reason: 'Please enter a single letter, number, or symbol (e.g., "R" or "q").' };
+    }
+    return { ok:true, value: v };
+  }
+
+  // Normalize URL: if empty -> null; if looks like absolute (http/https) leave; otherwise prepend https://
+  function normalizeUrl(raw) {
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    // If it's an absolute path starting with /, treat as root-relative
+    if (/^\//.test(trimmed)) return trimmed;
+    // Otherwise assume https
+    return 'https://' + trimmed;
+  }
+
+  // Delete divine_access cookie (path /divine and /)
+  function deleteAccessCookie() {
+    const name = 'divine_access';
+    // Expire in the past, ensure path matches how it was set
+    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/divine; SameSite=Strict';
+    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Strict';
+  }
+
+  // Shortcut activation handler (execute action)
+  function activateShortcut(cfg) {
+    if (!cfg) return;
+    if (cfg.removeAccess) {
+      deleteAccessCookie();
+      try {
+        localStorage.removeItem('divine_failed_attempts');
+        localStorage.removeItem('divine_lock_until');
+      } catch (e) { /* ignore */ }
+    }
+
+    const target = cfg.url || '/divine/';
+    // Use replace so this settings page doesn't remain in history stack when redirecting
+    location.href = target;
+  }
+
+  // Global key listener that triggers the configured shortcut
+  function globalKeyListener(e) {
+    const cfg = load();
+    if (!cfg || !cfg.key) return;
+
+    // Ignore if focus is in an input/textarea/contenteditable so typing isn't intercepted
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+      return;
+    }
+
+    // Determine whether modifiers match
+    if (cfg.ctrl && !e.ctrlKey) return;
+    if (cfg.alt && !e.altKey) return;
+    if (cfg.shift && !e.shiftKey) return;
+    if (cfg.search) {
+      // Search key isn't standardized; accept metaKey (Cmd/OS), getModifierState('Search'), or explicit 'Search' key value
+      const hasSearch = e.metaKey || (typeof e.getModifierState === 'function' && e.getModifierState('Search')) || e.key === 'Search';
+      if (!hasSearch) return;
+    }
+
+    // Only handle single-character keys (we saved as single-char)
+    // Compare case-insensitive
+    const pressed = e.key;
+    if (!pressed) return;
+    // Some keys produce longer names; require single-char
+    if (pressed.length !== 1) return;
+    if (pressed.toLowerCase() !== cfg.key.toLowerCase()) return;
+
+    // At this point modifiers and key match
+    // Prevent default to avoid conflicts (e.g., Ctrl+R reload)
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Avoid repeated triggers when user holds the key down
+    if (e.repeat) return;
+
+    // Perform activation
+    activateShortcut(cfg);
+  }
+
+  // Attach global listener
+  window.addEventListener('keydown', globalKeyListener, true);
+
+  // Capture a user's keypress into the key input when they focus and press a key
+  keyInput.addEventListener('keydown', function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    // If user pressed a modifier by itself, ignore and show a hint
+    if (e.key && FORBIDDEN.has(e.key)) {
+      showError('Press a non-modifier key (letters, numbers, symbols). Use the checkboxes for Ctrl/Alt/Shift/Search.');
+      return;
+    }
+    // Only accept printable single-character results
+    if (!e.key || e.key.length !== 1) {
+      showError('Please press a single letter, number or symbol key (e.g., "R").');
+      return;
+    }
+    // Put the literal character into the input (uppercase for readability)
+    keyInput.value = e.key.toUpperCase();
+    err.hidden = true;
+  }, false);
+
+  // Allow manual typing but sanitize on input
+  keyInput.addEventListener('input', function(){
+    err.hidden = true;
+  });
+
+  // Save button
+  saveBtn.addEventListener('click', function(){
+    const rawKey = keyInput.value.trim();
+    const v = validateKey(rawKey);
+    if (!v.ok) { showError(v.reason); return; }
+
+    const url = normalizeUrl(urlInput.value);
+    const cfg = {
+      key: v.value,
+      ctrl: !!modCtrl.checked,
+      alt: !!modAlt.checked,
+      shift: !!modShift.checked,
+      search: !!modSearch.checked,
+      removeAccess: !!modRemove.checked,
+      url: url
+    };
+
+    save(cfg);
+    showStatus('Shortcut saved. Press the combination anywhere to activate it.');
+  });
+
+  // Clear button: removes saved shortcut
+  clearBtn.addEventListener('click', function(){
+    clearSettings();
+    keyInput.value = '';
+    urlInput.value = '';
+    modCtrl.checked = modAlt.checked = modShift.checked = modSearch.checked = modRemove.checked = false;
+    showStatus('Shortcut cleared.');
+  });
+
+  // Test button: immediately run the activation with the current form values (after validation)
+  testBtn.addEventListener('click', function(){
+    const rawKey = keyInput.value.trim();
+    const v = validateKey(rawKey);
+    if (!v.ok) { showError(v.reason); return; }
+    const url = normalizeUrl(urlInput.value);
+    const cfg = {
+      key: v.value,
+      ctrl: !!modCtrl.checked,
+      alt: !!modAlt.checked,
+      shift: !!modShift.checked,
+      search: !!modSearch.checked,
+      removeAccess: !!modRemove.checked,
+      url: url
+    };
+    // Run activation
+    showStatus('Activating now…');
+    setTimeout(() => activateShortcut(cfg), 200);
+  });
+
+  // Initialize UI from storage
+  populate();
+
+  // Expose a small debug helper on window for quick inspection
+  window.__divine_shortcut_cfg = load;
+})();
+</script>
+</body>
+</html>

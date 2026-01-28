@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Page Not Found</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <style>
+    :root{
+      --bg:#071428;
+      --card:#16212b;
+      --panel:#1e2a34;
+      --muted:#97a6b3;
+      --input:#0f1720;
+      --cta:#3fc3ff;
+      --white:#ffffff;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);display:flex;align-items:center;justify-content:center}
+    .card{
+      width:820px;
+      max-width:92%;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:18px;
+      padding:46px 48px;
+      box-shadow:0 18px 50px rgba(3,9,18,0.7);
+      border: 1px solid rgba(255,255,255,0.03);
+      color:var(--white);
+      text-align:center;
+    }
+    h1{margin:0;font-size:40px;color:var(--white);font-weight:800;letter-spacing:0.2px}
+    p.lead{margin:18px 0 24px;color:var(--muted);font-size:18px}
+    .hint{color:var(--muted);font-weight:700;margin-top:6px}
+    .cta{display:inline-block;margin-top:20px;background:var(--cta);color:var(--white);padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:800;box-shadow:0 10px 30px rgba(63,195,255,0.14)}
+    .countdown{margin-top:12px;color:var(--muted);font-weight:700}
+    @media (max-width:520px){
+      .card{padding:28px 20px}
+      h1{font-size:28px}
+      p.lead{font-size:15px}
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="t" aria-live="polite">
+    <h1 id="t">We couldn't find that page</h1>
+    <p class="lead">We could not find the page you are looking for. Redirecting to the main page now.</p>
+
+    <div class="hint" id="hint">If you are not redirected, click the button below.</div>
+    <a class="cta" id="go" href="/index.html">Go to main page now</a>
+    <div class="countdown" id="count">Redirecting in 2s…</div>
+  </main>
+
+<script>
+(function(){
+  // Redirect target: root index (access gate)
+  var target = '/index.html';
+  var countdownEl = document.getElementById('count');
+  var go = document.getElementById('go');
+
+  // Countdown (in seconds)
+  var seconds = 2;
+  countdownEl.textContent = 'Redirecting in ' + seconds + 's…';
+
+  var iv = setInterval(function(){
+    seconds -= 1;
+    if (seconds <= 0) {
+      clearInterval(iv);
+      // Use replace so this 404 page won't remain in history
+      location.replace(target + location.search + location.hash);
+      return;
+    }
+    countdownEl.textContent = 'Redirecting in ' + seconds + 's…';
+  }, 1000);
+
+  // Make the CTA button use replace as well for a consistent UX (do not create extra history entry).
+  go.addEventListener('click', function(e){
+    e.preventDefault();
+    location.replace(target + location.search + location.hash);
+  }, {passive:false});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Verification Required</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <style>
+    :root{
+      --bg:#000;
+      --gold:#FFD700;
+      --panel: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.10);
+      --muted: rgba(255,215,0,0.85);
+      --sus:#ff8a2a;
+      --btn: linear-gradient(135deg, #e3b43a 12%, #a34bff 55%, #6d2bd6 100%);
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:var(--bg); color:var(--gold); }
+    body{ display:flex; align-items:center; justify-content:center; padding: 24px; }
+    .card{
+      width: 820px;
+      max-width: 96%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 34px 28px;
+      box-shadow: 0 18px 50px rgba(3,9,18,0.7);
+      text-align:center;
+    }
+    h1{ margin:0 0 10px; font-size: 2.2rem; font-weight: 900; }
+    p{ margin: 10px 0; color: var(--muted); font-weight: 800; font-size: 1.05rem; line-height: 1.35; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; color: rgba(255,255,255,0.92); font-weight: 900; }
+    .sus{
+      margin: 16px auto 0;
+      max-width: 600px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,138,42,0.25);
+      background: rgba(255,138,42,0.10);
+      color: rgba(255,230,200,0.95);
+      font-weight: 900;
+      line-height: 1.35;
+      text-align:left;
+      white-space: pre-wrap;
+    }
+    button{
+      margin-top: 18px;
+      width: 100%;
+      max-width: 420px;
+      border:none;
+      border-radius: 14px;
+      padding: 14px 14px;
+      color: #fff;
+      font-weight: 900;
+      font-size: 1.05rem;
+      cursor:pointer;
+      background: var(--btn);
+      box-shadow: 0 12px 34px rgba(0,0,0,0.55);
+    }
+    .hint{ margin-top: 10px; color: var(--muted); font-weight: 800; }
+  </style>
+</head>
+<body>
+  <div class="card" role="main" aria-labelledby="t">
+    <h1 id="t">Verification Required</h1>
+    <p>We have detected suspicious activity. Please wait for an admin to manually authorize you.</p>
+    <p>ClientID: <span class="mono" id="cid">…</span></p>
+
+    <div class="sus">
+Status: SUSPICIOUS
+An admin must verify your client before you can continue.
+    </div>
+
+    <button id="retry">Retry</button>
+    <div class="hint">If you just got verified, press Retry.</div>
+  </div>
+
+<script>
+(function(){
+  const STORAGE_KEY = "divine.clientID";
+  const cidEl = document.getElementById("cid");
+  const retryBtn = document.getElementById("retry");
+
+  function getPanelHost() {
+    if (typeof window !== "undefined" && window.__PANEL_HOST__) return String(window.__PANEL_HOST__);
+    return "https://dv-panel-app.sirco.online";
+  }
+
+  function getClientID(){
+    try {
+      if (window.__divine_clientid && typeof window.__divine_clientid.get === "function") {
+        return window.__divine_clientid.get();
+      }
+    } catch (e) {}
+
+    try {
+      const x = localStorage.getItem(STORAGE_KEY);
+      return x && x.trim() ? x.trim() : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function getBack(){
+    try {
+      const sp = new URLSearchParams(location.search || "");
+      return sp.get("back") || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  async function retry(){
+    const clientID = getClientID();
+    if (!clientID) return;
+
+    const PANEL_HOST = getPanelHost().replace(/\/+$/, "");
+    try {
+      const chk = await fetch(PANEL_HOST + "/api/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientID })
+      });
+      const chkJson = await chk.json().catch(() => ({}));
+      if (chk.ok && chkJson && chkJson.ok) {
+        const status = String(chkJson.status || "").toLowerCase();
+        if (chkJson.banned === true || status === "banned") {
+          const back = encodeURIComponent(getBack() || "/divine/");
+          location.replace("/banned?back=" + back);
+          return;
+        }
+        if (status === "verified" || (chkJson.allowed === true && status !== "suspicious")) {
+          const back = getBack();
+          location.replace(back ? decodeURIComponent(back) : "/divine/");
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
+  const cid = getClientID();
+  cidEl.textContent = cid || "(missing)";
+
+  retryBtn.addEventListener("click", retry);
+})();
+</script>
+</body>
+</html>
