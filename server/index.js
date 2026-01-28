@@ -6,6 +6,8 @@ const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const sqlite3 = require("sqlite3").verbose();
+const http = require("http");
+const WebSocket = require("ws");
 
 // -----------------------
 // Config
@@ -310,6 +312,74 @@ CREATE TABLE IF NOT EXISTS user_redirects (
   created_at INTEGER NOT NULL
 );`);
 
+  // DM system tables
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS dm_bans (
+  user_id TEXT PRIMARY KEY,
+  banned_until INTEGER NOT NULL,
+  ban_reason TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_bans_until ON dm_bans(banned_until);`);
+
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS dm_threads (
+  id TEXT PRIMARY KEY,
+  user_a TEXT NOT NULL,
+  user_b TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  last_message_at INTEGER NOT NULL
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_threads_user_a ON dm_threads(user_a);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_threads_user_b ON dm_threads(user_b);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_threads_last_message ON dm_threads(last_message_at);`);
+
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS dm_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_user_id TEXT NOT NULL,
+  to_user_id TEXT NOT NULL,
+  invite_message TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL,
+  responded_at INTEGER NOT NULL DEFAULT 0
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_requests_to ON dm_requests(to_user_id, status);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_requests_from ON dm_requests(from_user_id);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_requests_created ON dm_requests(created_at);`);
+
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS dm_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id TEXT NOT NULL,
+  from_user_id TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_messages_thread ON dm_messages(thread_id, created_at);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_messages_from ON dm_messages(from_user_id);`);
+
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS dm_reads (
+  thread_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  last_read_message_id INTEGER NOT NULL,
+  last_read_at INTEGER NOT NULL,
+  PRIMARY KEY (thread_id, user_id)
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_reads_user ON dm_reads(user_id);`);
+
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS dm_appeals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  appeal_text TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open'
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_appeals_status ON dm_appeals(status, created_at);`);
+
   // Ensure a default lockdown value exists (env is fallback only)
   const existing = await dbGet(`SELECT v FROM owner_state WHERE k='lockdown_enabled'`);
   if (!existing) {
@@ -365,6 +435,24 @@ async function requireUser(req, res) {
     return null;
   }
   return user;
+}
+
+// -------- DM ban helpers --------
+async function isUserDmBanned(userId) {
+  const row = await dbGet(`SELECT banned_until FROM dm_bans WHERE user_id=?`, [String(userId)]);
+  if (!row) return false;
+  const until = parseInt(row.banned_until || "0", 10);
+  return until && nowMs() < until;
+}
+
+async function getDmBan(userId) {
+  return await dbGet(`SELECT * FROM dm_bans WHERE user_id=?`, [String(userId)]);
+}
+
+function generateThreadId(userIdA, userIdB) {
+  // Always sort to ensure consistent thread ID for both users
+  const sorted = [String(userIdA), String(userIdB)].sort();
+  return `${sorted[0]}__${sorted[1]}`;
 }
 
 // -------- Owner auth helper for APIs (must be called after /owner cookie middleware in chain) --------
@@ -436,6 +524,45 @@ function parseDurationToMs(input) {
   if (unit === "h") return n * 60 * 60 * 1000;
   if (unit === "d") return n * 24 * 60 * 60 * 1000;
   return null;
+}
+
+// -----------------------
+// WebSocket infrastructure
+// -----------------------
+const wsClients = new Map(); // userId -> Set of WebSocket connections
+
+function notifyUser(userId, payload) {
+  const clients = wsClients.get(String(userId));
+  if (!clients || clients.size === 0) return;
+  
+  const message = JSON.stringify(payload);
+  for (const ws of clients) {
+    if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(message);
+      } catch (e) {
+        console.error("WS send error:", e);
+      }
+    }
+  }
+}
+
+function registerWsClient(userId, ws) {
+  const uid = String(userId);
+  if (!wsClients.has(uid)) {
+    wsClients.set(uid, new Set());
+  }
+  wsClients.get(uid).add(ws);
+}
+
+function unregisterWsClient(userId, ws) {
+  const uid = String(userId);
+  const clients = wsClients.get(uid);
+  if (!clients) return;
+  clients.delete(ws);
+  if (clients.size === 0) {
+    wsClients.delete(uid);
+  }
 }
 
 // -----------------------
@@ -1031,6 +1158,555 @@ app.post("/api/owner/reports/dismiss", async (req, res) => {
   }
 });
 
+// -------- Owner DM ban management --------
+app.get("/api/owner/dm-bans", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+
+    const rows = await dbAll(
+      `SELECT db.user_id, u.username, db.banned_until, db.ban_reason, db.created_at, u.last_ip
+       FROM dm_bans db
+       JOIN users u ON u.id = db.user_id
+       WHERE db.banned_until > ?
+       ORDER BY db.banned_until DESC
+       LIMIT 500`,
+      [nowMs()]
+    );
+
+    return res.json({
+      ok: true,
+      items: rows.map(r => ({
+        username: r.username,
+        userId: r.user_id,
+        ends: r.banned_until ? fmtTimeSec(r.banned_until) : "—",
+        reason: r.ban_reason || "",
+        lastIp: r.last_ip || ""
+      }))
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/owner/dm-ban", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+
+    const username = normalizeUsername(req.body?.username);
+    const duration = String(req.body?.duration || "").trim();
+    const reason = String(req.body?.reason || "").trim();
+
+    if (!username || !duration) return res.status(400).json({ ok: false, error: "Missing fields" });
+
+    const u = await dbGet(`SELECT id FROM users WHERE username=?`, [username]);
+    if (!u) return res.status(404).json({ ok: false, error: "User not found" });
+
+    const ms = parseDurationToMs(duration);
+    if (ms === null) return res.status(400).json({ ok: false, error: "Invalid duration (use 10m/1h/3d/permanent)" });
+
+    const until = (ms === Infinity) ? (nowMs() + (1000 * 60 * 60 * 24 * 365 * 100)) : (nowMs() + ms);
+    await dbRun(
+      `INSERT INTO dm_bans(user_id, banned_until, ban_reason, created_at) VALUES(?,?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET banned_until=excluded.banned_until, ban_reason=excluded.ban_reason`,
+      [u.id, until, clampStr(reason, 600), nowMs()]
+    );
+
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/owner/dm-unban", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+
+    const username = normalizeUsername(req.body?.username);
+    if (!username) return res.status(400).json({ ok: false, error: "Missing username" });
+
+    const u = await dbGet(`SELECT id FROM users WHERE username=?`, [username]);
+    if (!u) return res.status(404).json({ ok: false, error: "User not found" });
+
+    await dbRun(`DELETE FROM dm_bans WHERE user_id=?`, [u.id]);
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.get("/api/owner/dm-appeals", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+
+    const rows = await dbAll(
+      `SELECT id, user_id, username, appeal_text, created_at
+       FROM dm_appeals
+       WHERE status='open'
+       ORDER BY created_at DESC
+       LIMIT 300`
+    );
+
+    return res.json({
+      ok: true,
+      items: rows.map(r => ({
+        id: r.id,
+        title: `${fmtTimeSec(r.created_at)} • DM Ban Appeal`,
+        username: r.username,
+        userId: r.user_id,
+        body: r.appeal_text
+      }))
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/owner/dm-appeals/dismiss", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+
+    const id = parseInt(String(req.body?.id || ""), 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "Missing id" });
+
+    await dbRun(`UPDATE dm_appeals SET status='dismissed' WHERE id=?`, [id]);
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+// -------- DM APIs (user-level) --------
+app.get("/api/dm/search-users", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    const q = String(req.query?.q || "").trim();
+    if (!q || q.length < 2) return res.json({ ok: true, users: [] });
+
+    const rows = await dbAll(
+      `SELECT id, username FROM users 
+       WHERE username LIKE ? AND id != ? 
+       ORDER BY username 
+       LIMIT 20`,
+      [`%${q}%`, user.id]
+    );
+
+    return res.json({
+      ok: true,
+      users: rows.map(r => ({ id: r.id, username: r.username }))
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/dm/request", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    if (await isUserDmBanned(user.id)) {
+      return res.status(403).json({ ok: false, error: "DM banned" });
+    }
+
+    const toUserId = String(req.body?.toUserId || "").trim();
+    const inviteMessage = String(req.body?.inviteMessage || "").trim();
+
+    if (!toUserId) return res.status(400).json({ ok: false, error: "Missing toUserId" });
+    if (toUserId === user.id) return res.status(400).json({ ok: false, error: "Cannot DM yourself" });
+
+    const targetUser = await dbGet(`SELECT id, username FROM users WHERE id=?`, [toUserId]);
+    if (!targetUser) return res.status(404).json({ ok: false, error: "User not found" });
+
+    // Check if target is DM banned
+    if (await isUserDmBanned(toUserId)) {
+      return res.status(403).json({ ok: false, error: "Target user is DM banned" });
+    }
+
+    // Check if thread already exists
+    const threadId = generateThreadId(user.id, toUserId);
+    const existingThread = await dbGet(`SELECT id FROM dm_threads WHERE id=?`, [threadId]);
+    if (existingThread) {
+      return res.status(409).json({ ok: false, error: "Thread already exists" });
+    }
+
+    // Check for recent declined request (3 day cooldown)
+    const threeDaysAgo = nowMs() - (3 * 24 * 60 * 60 * 1000);
+    const recentDecline = await dbGet(
+      `SELECT id FROM dm_requests 
+       WHERE from_user_id=? AND to_user_id=? AND status='declined' AND responded_at > ?`,
+      [user.id, toUserId, threeDaysAgo]
+    );
+    if (recentDecline) {
+      return res.status(429).json({ ok: false, error: "Please wait 3 days after a decline" });
+    }
+
+    // Check for existing pending request
+    const pending = await dbGet(
+      `SELECT id FROM dm_requests WHERE from_user_id=? AND to_user_id=? AND status='pending'`,
+      [user.id, toUserId]
+    );
+    if (pending) {
+      return res.status(409).json({ ok: false, error: "Request already pending" });
+    }
+
+    // Create request
+    const result = await dbRun(
+      `INSERT INTO dm_requests(from_user_id, to_user_id, invite_message, status, created_at)
+       VALUES(?,?,?,?,?)`,
+      [user.id, toUserId, clampStr(inviteMessage, 500), 'pending', nowMs()]
+    );
+
+    // Notify via WebSocket
+    notifyUser(toUserId, { type: 'new_request', requestId: result.lastID, from: { id: user.id, username: user.username } });
+
+    return res.json({ ok: true, requestId: result.lastID });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.get("/api/dm/pending-requests", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    if (await isUserDmBanned(user.id)) {
+      return res.json({ ok: true, count: 0, requests: [] });
+    }
+
+    const rows = await dbAll(
+      `SELECT r.id, r.from_user_id, u.username, r.invite_message, r.created_at
+       FROM dm_requests r
+       JOIN users u ON u.id = r.from_user_id
+       WHERE r.to_user_id=? AND r.status='pending'
+       ORDER BY r.created_at DESC`,
+      [user.id]
+    );
+
+    return res.json({
+      ok: true,
+      count: rows.length,
+      requests: rows.map(r => ({
+        id: r.id,
+        from: { id: r.from_user_id, username: r.username },
+        inviteMessage: r.invite_message || "",
+        createdAt: r.created_at
+      }))
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/dm/request/:id/accept", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    if (await isUserDmBanned(user.id)) {
+      return res.status(403).json({ ok: false, error: "DM banned" });
+    }
+
+    const requestId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(requestId)) return res.status(400).json({ ok: false, error: "Invalid request ID" });
+
+    const request = await dbGet(`SELECT * FROM dm_requests WHERE id=? AND to_user_id=?`, [requestId, user.id]);
+    if (!request) return res.status(404).json({ ok: false, error: "Request not found" });
+    if (request.status !== 'pending') return res.status(409).json({ ok: false, error: "Request already responded to" });
+
+    // Check if sender is DM banned
+    if (await isUserDmBanned(request.from_user_id)) {
+      await dbRun(`UPDATE dm_requests SET status='declined', responded_at=? WHERE id=?`, [nowMs(), requestId]);
+      return res.status(403).json({ ok: false, error: "Sender is DM banned" });
+    }
+
+    // Create thread
+    const threadId = generateThreadId(user.id, request.from_user_id);
+    await dbRun(
+      `INSERT INTO dm_threads(id, user_a, user_b, created_at, last_message_at) VALUES(?,?,?,?,?)`,
+      [threadId, user.id, request.from_user_id, nowMs(), nowMs()]
+    );
+
+    // Update request status
+    await dbRun(`UPDATE dm_requests SET status='accepted', responded_at=? WHERE id=?`, [nowMs(), requestId]);
+
+    // Notify sender
+    notifyUser(request.from_user_id, { type: 'request_accepted', threadId, from: { id: user.id, username: user.username } });
+
+    return res.json({ ok: true, threadId });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/dm/request/:id/decline", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    const requestId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(requestId)) return res.status(400).json({ ok: false, error: "Invalid request ID" });
+
+    const request = await dbGet(`SELECT * FROM dm_requests WHERE id=? AND to_user_id=?`, [requestId, user.id]);
+    if (!request) return res.status(404).json({ ok: false, error: "Request not found" });
+    if (request.status !== 'pending') return res.status(409).json({ ok: false, error: "Request already responded to" });
+
+    // Update request status
+    await dbRun(`UPDATE dm_requests SET status='declined', responded_at=? WHERE id=?`, [nowMs(), requestId]);
+
+    // Notify sender
+    notifyUser(request.from_user_id, { type: 'request_declined', from: { id: user.id, username: user.username } });
+
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.get("/api/dm/threads", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    if (await isUserDmBanned(user.id)) {
+      return res.json({ ok: true, threads: [] });
+    }
+
+    const rows = await dbAll(
+      `SELECT t.id, t.user_a, t.user_b, t.last_message_at, 
+              ua.username as username_a, ub.username as username_b,
+              (SELECT COUNT(*) FROM dm_messages m 
+               LEFT JOIN dm_reads r ON r.thread_id = t.id AND r.user_id = ?
+               WHERE m.thread_id = t.id AND m.from_user_id != ? 
+               AND (r.last_read_message_id IS NULL OR m.id > r.last_read_message_id)) as unread_count
+       FROM dm_threads t
+       JOIN users ua ON ua.id = t.user_a
+       JOIN users ub ON ub.id = t.user_b
+       WHERE t.user_a=? OR t.user_b=?
+       ORDER BY t.last_message_at DESC`,
+      [user.id, user.id, user.id, user.id]
+    );
+
+    return res.json({
+      ok: true,
+      threads: rows.map(r => {
+        const otherUserId = r.user_a === user.id ? r.user_b : r.user_a;
+        const otherUsername = r.user_a === user.id ? r.username_b : r.username_a;
+        return {
+          id: r.id,
+          otherUser: { id: otherUserId, username: otherUsername },
+          lastMessageAt: r.last_message_at,
+          unreadCount: Number(r.unread_count || 0)
+        };
+      })
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.get("/api/dm/threads/:threadId/messages", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    if (await isUserDmBanned(user.id)) {
+      return res.status(403).json({ ok: false, error: "DM banned" });
+    }
+
+    const threadId = String(req.params.threadId || "").trim();
+    if (!threadId) return res.status(400).json({ ok: false, error: "Missing thread ID" });
+
+    // Verify user is part of thread
+    const thread = await dbGet(`SELECT * FROM dm_threads WHERE id=?`, [threadId]);
+    if (!thread) return res.status(404).json({ ok: false, error: "Thread not found" });
+    if (thread.user_a !== user.id && thread.user_b !== user.id) {
+      return res.status(403).json({ ok: false, error: "Not authorized" });
+    }
+
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query?.limit || "50"), 10)));
+    const rows = await dbAll(
+      `SELECT m.id, m.from_user_id, u.username, m.message, m.created_at
+       FROM dm_messages m
+       JOIN users u ON u.id = m.from_user_id
+       WHERE m.thread_id=?
+       ORDER BY m.created_at DESC
+       LIMIT ?`,
+      [threadId, limit]
+    );
+
+    return res.json({
+      ok: true,
+      messages: rows.reverse().map(r => ({
+        id: r.id,
+        from: { id: r.from_user_id, username: r.username },
+        message: r.message,
+        createdAt: r.created_at
+      }))
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/dm/threads/:threadId/messages", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    if (await isUserDmBanned(user.id)) {
+      return res.status(403).json({ ok: false, error: "DM banned" });
+    }
+
+    const threadId = String(req.params.threadId || "").trim();
+    const message = String(req.body?.message || "").trim();
+
+    if (!threadId) return res.status(400).json({ ok: false, error: "Missing thread ID" });
+    if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
+    if (message.length > 2000) return res.status(400).json({ ok: false, error: "Message too long" });
+
+    // Verify user is part of thread
+    const thread = await dbGet(`SELECT * FROM dm_threads WHERE id=?`, [threadId]);
+    if (!thread) return res.status(404).json({ ok: false, error: "Thread not found" });
+    if (thread.user_a !== user.id && thread.user_b !== user.id) {
+      return res.status(403).json({ ok: false, error: "Not authorized" });
+    }
+
+    const otherUserId = thread.user_a === user.id ? thread.user_b : thread.user_a;
+
+    // Check if other user is DM banned
+    if (await isUserDmBanned(otherUserId)) {
+      return res.status(403).json({ ok: false, error: "Recipient is DM banned" });
+    }
+
+    // Insert message
+    const result = await dbRun(
+      `INSERT INTO dm_messages(thread_id, from_user_id, message, created_at) VALUES(?,?,?,?)`,
+      [threadId, user.id, message, nowMs()]
+    );
+
+    // Update thread last_message_at
+    await dbRun(`UPDATE dm_threads SET last_message_at=? WHERE id=?`, [nowMs(), threadId]);
+
+    // Notify other user
+    notifyUser(otherUserId, { 
+      type: 'new_message', 
+      threadId, 
+      messageId: result.lastID,
+      from: { id: user.id, username: user.username },
+      message 
+    });
+
+    return res.json({ ok: true, messageId: result.lastID });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/dm/threads/:threadId/read", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    const threadId = String(req.params.threadId || "").trim();
+    if (!threadId) return res.status(400).json({ ok: false, error: "Missing thread ID" });
+
+    // Verify user is part of thread
+    const thread = await dbGet(`SELECT * FROM dm_threads WHERE id=?`, [threadId]);
+    if (!thread) return res.status(404).json({ ok: false, error: "Thread not found" });
+    if (thread.user_a !== user.id && thread.user_b !== user.id) {
+      return res.status(403).json({ ok: false, error: "Not authorized" });
+    }
+
+    // Get latest message ID in this thread
+    const lastMsg = await dbGet(`SELECT id FROM dm_messages WHERE thread_id=? ORDER BY created_at DESC LIMIT 1`, [threadId]);
+    if (!lastMsg) return res.json({ ok: true }); // No messages to mark read
+
+    // Update or insert read marker
+    await dbRun(
+      `INSERT INTO dm_reads(thread_id, user_id, last_read_message_id, last_read_at) VALUES(?,?,?,?)
+       ON CONFLICT(thread_id, user_id) DO UPDATE SET last_read_message_id=excluded.last_read_message_id, last_read_at=excluded.last_read_at`,
+      [threadId, user.id, lastMsg.id, nowMs()]
+    );
+
+    // Notify self to update unread count
+    notifyUser(user.id, { type: 'unread_update' });
+
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.get("/api/dm/unread-count", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    if (await isUserDmBanned(user.id)) {
+      return res.json({ ok: true, count: 0 });
+    }
+
+    const result = await dbGet(
+      `SELECT COUNT(DISTINCT m.thread_id) as unread_threads,
+              COUNT(*) as unread_messages
+       FROM dm_messages m
+       JOIN dm_threads t ON t.id = m.thread_id
+       LEFT JOIN dm_reads r ON r.thread_id = m.thread_id AND r.user_id = ?
+       WHERE (t.user_a=? OR t.user_b=?) 
+       AND m.from_user_id != ?
+       AND (r.last_read_message_id IS NULL OR m.id > r.last_read_message_id)`,
+      [user.id, user.id, user.id, user.id]
+    );
+
+    return res.json({ 
+      ok: true, 
+      count: Number(result?.unread_messages || 0),
+      unreadThreads: Number(result?.unread_threads || 0)
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/dm/appeal", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+
+    const appealText = String(req.body?.appealText || "").trim();
+    if (!appealText) return res.status(400).json({ ok: false, error: "Missing appeal text" });
+    if (appealText.length > 1000) return res.status(400).json({ ok: false, error: "Appeal too long (max 1000 chars)" });
+
+    // Check if user is actually DM banned
+    if (!await isUserDmBanned(user.id)) {
+      return res.status(400).json({ ok: false, error: "You are not DM banned" });
+    }
+
+    // Check for recent appeal (prevent spam)
+    const oneDayAgo = nowMs() - (24 * 60 * 60 * 1000);
+    const recentAppeal = await dbGet(
+      `SELECT id FROM dm_appeals WHERE user_id=? AND created_at > ?`,
+      [user.id, oneDayAgo]
+    );
+    if (recentAppeal) {
+      return res.status(429).json({ ok: false, error: "Please wait 24 hours between appeals" });
+    }
+
+    // Create appeal
+    await dbRun(
+      `INSERT INTO dm_appeals(user_id, username, appeal_text, created_at, status) VALUES(?,?,?,?,?)`,
+      [user.id, user.username, appealText, nowMs(), 'open']
+    );
+
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
 // -----------------------
 // Auth protect /divine/* (including /divine/profile/*) + activity logging + redirect-on-next-load
 // -----------------------
@@ -1058,6 +1734,34 @@ app.use("/divine", async (req, res, next) => {
     } catch {}
 
     req.user = user;
+    return next();
+  } catch {
+    return res.redirect(302, "/");
+  }
+});
+
+// -----------------------
+// DM ban enforcement for /divine/dm/*
+// -----------------------
+app.use("/divine/dm", async (req, res, next) => {
+  try {
+    const user = req.user; // Already set by /divine middleware
+    if (!user) return res.redirect(302, "/");
+
+    // Check DM ban
+    const dmBan = await getDmBan(user.id);
+    if (dmBan) {
+      const until = parseInt(dmBan.banned_until || "0", 10);
+      if (until && nowMs() < until) {
+        // Allow access to ban.html itself
+        if (req.path === "/ban.html" || req.path === "/ban.js") {
+          return next();
+        }
+        // Redirect to ban page
+        return res.redirect(302, "/divine/dm/ban.html");
+      }
+    }
+
     return next();
   } catch {
     return res.redirect(302, "/");
@@ -1096,11 +1800,89 @@ app.use((req, res) => {
   return res.status(404).redirect(302, "/");
 });
 
+// -----------------------
+// WebSocket Server
+// -----------------------
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server, path: "/ws" });
+
+wss.on("connection", async (ws, req) => {
+  let userId = null;
+  
+  try {
+    // Parse cookies from upgrade request
+    const cookies = {};
+    const cookieHeader = req.headers.cookie;
+    if (cookieHeader) {
+      cookieHeader.split(";").forEach(cookie => {
+        const parts = cookie.split("=");
+        const key = parts[0].trim();
+        const value = parts.slice(1).join("=").trim();
+        cookies[key] = value;
+      });
+    }
+
+    // Verify JWT
+    const token = cookies[COOKIE_USER];
+    if (!token) {
+      ws.close(4001, "Unauthorized");
+      return;
+    }
+
+    const payload = verifyUserJwt(token);
+    if (!payload || !payload.uid) {
+      ws.close(4001, "Unauthorized");
+      return;
+    }
+
+    const user = await dbGet(`SELECT * FROM users WHERE id=?`, [String(payload.uid)]);
+    if (!user) {
+      ws.close(4001, "Unauthorized");
+      return;
+    }
+
+    const tvJwt = parseInt(payload.tv || "0", 10);
+    const tvDb = parseInt(user.token_version || "0", 10);
+    if (tvJwt !== tvDb) {
+      ws.close(4001, "Unauthorized");
+      return;
+    }
+
+    // Check site-wide ban
+    if (await isUserBanned(user)) {
+      ws.close(4003, "Banned");
+      return;
+    }
+
+    userId = user.id;
+    registerWsClient(userId, ws);
+
+    // Send initial state
+    ws.send(JSON.stringify({ type: "connected", userId }));
+
+  } catch (e) {
+    console.error("WS auth error:", e);
+    ws.close(4000, "Error");
+    return;
+  }
+
+  ws.on("close", () => {
+    if (userId) {
+      unregisterWsClient(userId, ws);
+    }
+  });
+
+  ws.on("error", (err) => {
+    console.error("WS error:", err);
+  });
+});
+
 // Start
 initDb()
   .then(() => {
-    app.listen(CONFIG.port, () => {
+    server.listen(CONFIG.port, () => {
       console.log(`Divine server listening on :${CONFIG.port}`);
+      console.log(`WebSocket server ready at ws://localhost:${CONFIG.port}/ws`);
       console.log(`DB: ${CONFIG.dbPath}`);
     });
   })
