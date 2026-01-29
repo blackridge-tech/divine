@@ -597,9 +597,25 @@ app.get("/", async (req, res) => {
   return sendRepoFile(res, "index.html");
 });
 
-// Activation pages
-app.get("/activate", (req, res) => sendRepoFile(res, "activate/index.html"));
-app.get("/activate/register", (req, res) => sendRepoFile(res, "activate/register/index.html"));
+// Activation pages (blocked during lockdown)
+app.get("/activate", async (req, res) => {
+  try {
+    const enabled = await getLockdownEnabled();
+    if (enabled) {
+      return res.redirect(302, "/");
+    }
+  } catch {}
+  return sendRepoFile(res, "activate/index.html");
+});
+app.get("/activate/register", async (req, res) => {
+  try {
+    const enabled = await getLockdownEnabled();
+    if (enabled) {
+      return res.redirect(302, "/");
+    }
+  } catch {}
+  return sendRepoFile(res, "activate/register/index.html");
+});
 
 // Owner page (same file; UI does pin overlay)
 app.get("/owner", (req, res) => sendRepoFile(res, "owner/index.html"));
@@ -763,6 +779,67 @@ app.post("/api/logout", (req, res) => {
   clearUserCookie(res);
   return res.json({ ok: true });
 });
+
+// Ban info and appeal page
+app.get("/banned", (req, res) => sendRepoFile(res, "banned/index.html"));
+
+app.get("/api/ban-info", async (req, res) => {
+  try {
+    const user = await verifyUserFromRequest(req);
+    if (!user) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    
+    const isBanned = await isUserBanned(user);
+    if (!isBanned) return res.json({ ok: true, banned: false });
+    
+    const remainingMs = parseInt(user.banned_until || "0", 10) - nowMs();
+    
+    return res.json({
+      ok: true,
+      banned: true,
+      reason: user.ban_reason || "No reason provided",
+      remainingMs: Math.max(0, remainingMs),
+      bannedUntil: user.banned_until
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/ban-appeal", async (req, res) => {
+  try {
+    const user = await verifyUserFromRequest(req);
+    if (!user) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    
+    const appealText = String(req.body?.appealText || "").trim();
+    if (!appealText) return res.status(400).json({ ok: false, error: "Missing appeal text" });
+    if (appealText.length > 1000) return res.status(400).json({ ok: false, error: "Appeal too long (max 1000 chars)" });
+    
+    if (!await isUserBanned(user)) {
+      return res.status(400).json({ ok: false, error: "You are not banned" });
+    }
+    
+    // Check for recent appeal (prevent spam)
+    const oneDayAgo = nowMs() - (24 * 60 * 60 * 1000);
+    const recentAppeal = await dbGet(
+      `SELECT id FROM reports WHERE reporter_id=? AND target_type='ban_appeal' AND created_at > ?`,
+      [user.id, oneDayAgo]
+    );
+    if (recentAppeal) {
+      return res.status(429).json({ ok: false, error: "Please wait 24 hours between appeals" });
+    }
+    
+    // Store appeal in reports table with target_type='ban_appeal'
+    await dbRun(
+      `INSERT INTO reports(created_at, reporter_id, reporter_username, target_type, target_ref, target_username, body, status) VALUES(?,?,?,?,?,?,?,?)`,
+      [nowMs(), user.id, user.username, "ban_appeal", user.id, user.username, appealText, "open"]
+    );
+    
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
 
 // Profile APIs
 app.get("/api/me", async (req, res) => {
@@ -1742,7 +1819,7 @@ app.use("/divine", async (req, res, next) => {
 
     if (await isUserBanned(user)) {
       clearUserCookie(res);
-      return res.redirect(302, "/");
+      return res.redirect(302, "/banned");
     }
 
     // One-time redirect tool
