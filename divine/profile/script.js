@@ -14,7 +14,14 @@
 
   const logout = document.getElementById("logout");
 
+  // Search elements
+  const searchInput = document.getElementById("searchInput");
+  const searchResults = document.getElementById("searchResults");
+  const resultsList = document.getElementById("resultsList");
+  const searchMsg = document.getElementById("searchMsg");
+
   let userId = "";
+  let searchTimeout = null;
 
   function setMsg(el, text, kind){
     el.textContent = text || "";
@@ -108,6 +115,60 @@
     logout.disabled = true;
     try { await fetch("/api/logout", { method: "POST" }); } catch {}
     location.href = "/";
+  });
+
+  // Search functionality
+  async function performSearch(query){
+    if (!query || query.length < 2) {
+      searchResults.style.display = "none";
+      setMsg(searchMsg, "", "");
+      return;
+    }
+
+    try {
+      setMsg(searchMsg, "Searching...", "");
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}&limit=10`);
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        setMsg(searchMsg, data.error || "Search failed", "err");
+        searchResults.style.display = "none";
+        return;
+      }
+
+      if (!data.users || data.users.length === 0) {
+        setMsg(searchMsg, "No users found", "");
+        searchResults.style.display = "none";
+        return;
+      }
+
+      setMsg(searchMsg, "", "");
+      resultsList.innerHTML = data.users.map(u => `
+        <a href="/divine/u/${encodeURIComponent(u.username)}" 
+           style="display:block;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.25);text-decoration:none;transition:background 0.2s;"
+           onmouseover="this.style.background='rgba(255,255,255,0.08)'"
+           onmouseout="this.style.background='rgba(0,0,0,0.25)'">
+          <div style="font-weight:800;color:var(--gold);margin-bottom:4px;">${escapeHtml(u.username)}</div>
+          <div style="font-size:0.9rem;color:var(--muted);">${escapeHtml(u.bio || 'No bio')}</div>
+        </a>
+      `).join("");
+      searchResults.style.display = "block";
+    } catch (e) {
+      setMsg(searchMsg, "Network error", "err");
+      searchResults.style.display = "none";
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  searchInput.addEventListener("input", (e) => {
+    clearTimeout(searchTimeout);
+    const query = (e.target.value || "").trim();
+    searchTimeout = setTimeout(() => performSearch(query), 300);
   });
 
   load();

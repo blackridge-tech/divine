@@ -256,6 +256,14 @@ CREATE TABLE IF NOT EXISTS users (
 
   await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);`);
 
+  // Add last_seen_at column if it doesn't exist (migration)
+  try {
+    await dbRun(`ALTER TABLE users ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0;`);
+  } catch {
+    // Column already exists
+  }
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen_at);`);
+
   // Owner-controlled state (lockdown + future flags)
   await dbRun(`
 CREATE TABLE IF NOT EXISTS owner_state (
@@ -392,6 +400,10 @@ async function isUserBanned(userRow) {
   if (!userRow) return false;
   const until = parseInt(userRow.banned_until || "0", 10);
   return until && nowMs() < until;
+}
+
+async function updateLastSeen(userId) {
+  await dbRun(`UPDATE users SET last_seen_at=? WHERE id=?`, [nowMs(), String(userId)]);
 }
 
 async function updateLastIp(userId, ip) {
@@ -597,9 +609,25 @@ app.get("/", async (req, res) => {
   return sendRepoFile(res, "index.html");
 });
 
-// Activation pages
-app.get("/activate", (req, res) => sendRepoFile(res, "activate/index.html"));
-app.get("/activate/register", (req, res) => sendRepoFile(res, "activate/register/index.html"));
+// Activation pages (blocked during lockdown)
+app.get("/activate", async (req, res) => {
+  try {
+    const enabled = await getLockdownEnabled();
+    if (enabled) {
+      return res.redirect(302, "/");
+    }
+  } catch {}
+  return sendRepoFile(res, "activate/index.html");
+});
+app.get("/activate/register", async (req, res) => {
+  try {
+    const enabled = await getLockdownEnabled();
+    if (enabled) {
+      return res.redirect(302, "/");
+    }
+  } catch {}
+  return sendRepoFile(res, "activate/register/index.html");
+});
 
 // Owner page (same file; UI does pin overlay)
 app.get("/owner", (req, res) => sendRepoFile(res, "owner/index.html"));
@@ -607,6 +635,9 @@ app.get("/owner", (req, res) => sendRepoFile(res, "owner/index.html"));
 // Profile page (inside /divine)
 app.get("/divine/profile", (req, res) => res.redirect(302, "/divine/profile/"));
 app.get("/divine/profile/", (req, res) => sendRepoFile(res, "divine/profile/index.html"));
+
+// Public user profile view
+app.get("/divine/u/:username", (req, res) => sendRepoFile(res, "divine/user/index.html"));
 
 // Convenience
 app.get("/divine", (req, res) => res.redirect(302, "/divine/"));
@@ -764,6 +795,147 @@ app.post("/api/logout", (req, res) => {
   return res.json({ ok: true });
 });
 
+// Ban info and appeal page
+app.get("/banned", (req, res) => sendRepoFile(res, "banned/index.html"));
+
+app.get("/api/ban-info", async (req, res) => {
+  try {
+    const user = await verifyUserFromRequest(req);
+    if (!user) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    
+    const isBanned = await isUserBanned(user);
+    if (!isBanned) return res.json({ ok: true, banned: false });
+    
+    const remainingMs = parseInt(user.banned_until || "0", 10) - nowMs();
+    
+    return res.json({
+      ok: true,
+      banned: true,
+      reason: user.ban_reason || "No reason provided",
+      remainingMs: Math.max(0, remainingMs),
+      bannedUntil: user.banned_until
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/ban-appeal", async (req, res) => {
+  try {
+    const user = await verifyUserFromRequest(req);
+    if (!user) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    
+    const appealText = String(req.body?.appealText || "").trim();
+    if (!appealText) return res.status(400).json({ ok: false, error: "Missing appeal text" });
+    if (appealText.length > 1000) return res.status(400).json({ ok: false, error: "Appeal too long (max 1000 chars)" });
+    
+    if (!await isUserBanned(user)) {
+      return res.status(400).json({ ok: false, error: "You are not banned" });
+    }
+    
+    // Check for recent appeal (prevent spam)
+    const oneDayAgo = nowMs() - (24 * 60 * 60 * 1000);
+    const recentAppeal = await dbGet(
+      `SELECT id FROM reports WHERE reporter_id=? AND target_type='ban_appeal' AND created_at > ?`,
+      [user.id, oneDayAgo]
+    );
+    if (recentAppeal) {
+      return res.status(429).json({ ok: false, error: "Please wait 24 hours between appeals" });
+    }
+    
+    // Store appeal in reports table with target_type='ban_appeal'
+    await dbRun(
+      `INSERT INTO reports(created_at, reporter_id, reporter_username, target_type, target_ref, target_username, body, status) VALUES(?,?,?,?,?,?,?,?)`,
+      [nowMs(), user.id, user.username, "ban_appeal", user.id, user.username, appealText, "open"]
+    );
+    
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+// User reporting API
+app.post("/api/report", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    
+    const targetType = String(req.body?.targetType || "").trim();
+    const targetRef = String(req.body?.targetRef || "").trim();
+    const targetUsername = String(req.body?.targetUsername || "").trim();
+    const body = String(req.body?.body || "").trim();
+    
+    if (!targetType) return res.status(400).json({ ok: false, error: "Missing target type" });
+    if (!targetRef) return res.status(400).json({ ok: false, error: "Missing target reference" });
+    if (!body) return res.status(400).json({ ok: false, error: "Missing report body" });
+    if (body.length > 1000) return res.status(400).json({ ok: false, error: "Report too long (max 1000 chars)" });
+    
+    // Validate target type
+    const validTypes = ["profile", "dm_message"];
+    if (!validTypes.includes(targetType)) {
+      return res.status(400).json({ ok: false, error: "Invalid target type" });
+    }
+    
+    // Prevent spam: one report per target per user per day
+    const oneDayAgo = nowMs() - (24 * 60 * 60 * 1000);
+    const existingReport = await dbGet(
+      `SELECT id FROM reports WHERE reporter_id=? AND target_type=? AND target_ref=? AND created_at > ?`,
+      [user.id, targetType, targetRef, oneDayAgo]
+    );
+    if (existingReport) {
+      return res.status(429).json({ ok: false, error: "You already reported this today" });
+    }
+    
+    // Store report
+    await dbRun(
+      `INSERT INTO reports(created_at, reporter_id, reporter_username, target_type, target_ref, target_username, body, status) VALUES(?,?,?,?,?,?,?,?)`,
+      [nowMs(), user.id, user.username, targetType, targetRef, targetUsername, body, "open"]
+    );
+    
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+// User search API
+app.get("/api/users/search", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    
+    const q = String(req.query?.q || "").trim();
+    if (!q) return res.json({ ok: true, users: [] });
+    if (q.length < 2) return res.status(400).json({ ok: false, error: "Query too short (min 2 chars)" });
+    
+    const limit = Math.min(20, Math.max(1, parseInt(String(req.query?.limit || "10"), 10)));
+    
+    // Escape SQL wildcards and backslashes to prevent injection
+    const escapedQ = q.replace(/\\/g, '\\\\').replace(/[%_]/g, '\\$&');
+    
+    // Search by username only (IDs should remain private)
+    const rows = await dbAll(
+      `SELECT username, bio FROM users 
+       WHERE username LIKE ? ESCAPE '\\'
+       AND banned_until < ?
+       ORDER BY username 
+       LIMIT ?`,
+      [`%${escapedQ}%`, nowMs(), limit]
+    );
+    
+    return res.json({
+      ok: true,
+      users: rows.map(r => ({
+        username: r.username,
+        bio: r.bio || ""
+      }))
+    });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
 // Profile APIs
 app.get("/api/me", async (req, res) => {
   try {
@@ -797,6 +969,35 @@ app.post("/api/me", async (req, res) => {
 
     await dbRun(`UPDATE users SET bio=? WHERE id=?`, [bio, user.id]);
     return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+// Get public user profile by username
+app.get("/api/user/:username", async (req, res) => {
+  try {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    
+    const username = String(req.params?.username || "").trim();
+    if (!username) return res.status(400).json({ ok: false, error: "Missing username" });
+    
+    const targetUser = await dbGet(
+      `SELECT id, username, bio FROM users WHERE username=? AND banned_until < ?`,
+      [username, nowMs()]
+    );
+    
+    if (!targetUser) return res.status(404).json({ ok: false, error: "User not found" });
+    
+    // Never expose user ID in public profile
+    return res.json({
+      ok: true,
+      user: {
+        username: targetUser.username,
+        bio: targetUser.bio || ""
+      }
+    });
   } catch {
     return res.status(500).json({ ok: false, error: "Server error" });
   }
@@ -870,7 +1071,10 @@ app.get("/api/owner/state", async (req, res) => {
     if (!requireOwner(req, res)) return;
 
     const lockdownEnabled = await getLockdownEnabled();
-    const activeUsers = await dbGet(`SELECT COUNT(*) AS c FROM users WHERE banned_until=0 OR banned_until<=?`, [nowMs()]);
+    
+    // Active users = users seen within last 10 minutes
+    const tenMinutesAgo = nowMs() - (10 * 60 * 1000);
+    const activeUsers = await dbGet(`SELECT COUNT(*) AS c FROM users WHERE last_seen_at > ?`, [tenMinutesAgo]);
     const bannedUsers = await dbGet(`SELECT COUNT(*) AS c FROM users WHERE banned_until>?`, [nowMs()]);
 
     return res.json({
@@ -1739,14 +1943,15 @@ app.use("/divine", async (req, res, next) => {
     if (!user) return res.redirect(302, "/");
 
     try { await updateLastIp(user.id, getReqIp(req)); } catch {}
+    try { await updateLastSeen(user.id); } catch {}
 
     if (await isUserBanned(user)) {
       clearUserCookie(res);
-      return res.redirect(302, "/");
+      return res.redirect(302, "/banned");
     }
 
     // One-time redirect tool
-  try {
+    try {
       const redir = await getAndConsumeRedirect(user.id);
       if (redir) return res.redirect(302, redir);
     } catch {}

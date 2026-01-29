@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>User Profile</title>
+  <link rel="stylesheet" href="/divine/profile/styles.css" />
+</head>
+<body>
+  <div class="bg" aria-hidden="true"></div>
+  <div class="noise" aria-hidden="true"></div>
+
+  <main class="wrap" role="main" aria-labelledby="username">
+    <section class="card">
+      <div class="top">
+        <div>
+          <h1 id="username">Loading...</h1>
+          <p class="lead" id="bio">—</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ghost" id="reportBtn" type="button">Report</button>
+          <a class="btn ghost" href="/divine/">Back</a>
+        </div>
+      </div>
+
+      <div id="errorMsg" class="msg" style="display:none;"></div>
+
+      <!-- Report Modal -->
+      <div id="reportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999;align-items:center;justify-content:center;">
+        <div style="background:linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.10);border-radius:18px;padding:24px;max-width:500px;width:90%;">
+          <h2 style="margin:0 0 12px;font-size:1.4rem;color:var(--gold);">Report User</h2>
+          <p style="margin:0 0 16px;font-size:0.95rem;color:var(--muted);">Describe why you're reporting this profile.</p>
+          <textarea id="reportText" placeholder="Report reason..." maxlength="1000" style="width:100%;min-height:120px;border-radius:12px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.35);color:#fff;padding:12px;font-size:1rem;font-family:inherit;"></textarea>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button id="submitReport" class="btn primary" type="button">Submit</button>
+            <button id="cancelReport" class="btn ghost" type="button">Cancel</button>
+          </div>
+          <div id="reportMsg" class="msg" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+(function(){
+  const username = document.getElementById("username");
+  const bio = document.getElementById("bio");
+  const errorMsg = document.getElementById("errorMsg");
+  const reportBtn = document.getElementById("reportBtn");
+  const reportModal = document.getElementById("reportModal");
+  const reportText = document.getElementById("reportText");
+  const submitReport = document.getElementById("submitReport");
+  const cancelReport = document.getElementById("cancelReport");
+  const reportMsg = document.getElementById("reportMsg");
+
+  let currentUsername = "";
+
+  function setError(msg){
+    errorMsg.textContent = msg || "";
+    errorMsg.style.display = msg ? "block" : "none";
+  }
+
+  function setReportMsg(text, kind){
+    reportMsg.textContent = text || "";
+    reportMsg.className = "msg" + (kind ? " " + kind : "");
+  }
+
+  function showReportModal(){
+    reportModal.style.display = "flex";
+    reportText.value = "";
+    setReportMsg("", "");
+  }
+
+  function hideReportModal(){
+    reportModal.style.display = "none";
+  }
+
+  async function loadProfile(){
+    const path = location.pathname || "";
+    const parts = path.split("/").filter(p => p);
+    const usernameParam = parts[parts.length - 1];
+
+    if (!usernameParam) {
+      setError("No username specified");
+      return;
+    }
+
+    currentUsername = usernameParam;
+
+    try {
+      const res = await fetch(`/api/user/${encodeURIComponent(usernameParam)}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        setError(data.error || "User not found");
+        username.textContent = "User Not Found";
+        bio.textContent = "";
+        return;
+      }
+
+      username.textContent = data.user.username;
+      bio.textContent = data.user.bio || "No bio";
+      document.title = `${data.user.username} - Profile`;
+    } catch (e) {
+      setError("Failed to load profile");
+    }
+  }
+
+  async function submitReportHandler(){
+    const text = (reportText.value || "").trim();
+    if (!text) {
+      setReportMsg("Please enter a report reason", "err");
+      return;
+    }
+
+    try {
+      submitReport.disabled = true;
+      setReportMsg("Submitting...", "");
+
+      const res = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetType: "profile",
+          targetRef: currentUsername,
+          targetUsername: currentUsername,
+          body: text
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        setReportMsg(data.error || "Failed to submit report", "err");
+        return;
+      }
+
+      setReportMsg("Report submitted successfully", "ok");
+      setTimeout(hideReportModal, 1500);
+    } catch (e) {
+      setReportMsg("Network error", "err");
+    } finally {
+      submitReport.disabled = false;
+    }
+  }
+
+  reportBtn.addEventListener("click", showReportModal);
+  cancelReport.addEventListener("click", hideReportModal);
+  submitReport.addEventListener("click", submitReportHandler);
+
+  reportModal.addEventListener("click", (e) => {
+    if (e.target === reportModal) hideReportModal();
+  });
+
+  loadProfile();
+})();
+  </script>
+</body>
+</html>

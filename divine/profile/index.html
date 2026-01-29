@@ -34,6 +34,25 @@
 
       <div class="divider"></div>
 
+      <!-- User Search -->
+      <section class="panel">
+        <div class="panelTitle">Search Users</div>
+        <div class="panelText">Find users by username.</div>
+
+        <div class="field">
+          <label for="searchInput">Search</label>
+          <input id="searchInput" placeholder="Enter username..." autocomplete="off" />
+        </div>
+
+        <div id="searchResults" style="margin-top:12px;display:none;">
+          <div style="font-size:0.9rem;color:var(--muted);margin-bottom:8px;">Results:</div>
+          <div id="resultsList" style="display:flex;flex-direction:column;gap:8px;"></div>
+        </div>
+        <div id="searchMsg" class="msg" role="status"></div>
+      </section>
+
+      <div class="divider"></div>
+
       <div class="grid2">
         <section class="panel">
           <div class="panelTitle">Username</div>
