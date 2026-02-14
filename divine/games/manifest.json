@@ -1,0 +1,15 @@
+{
+  "name": "Divine Games",
+  "short_name": "DivineGames",
+  "start_url": "/games/",
+  "display": "standalone",
+  "background_color": "#05050a",
+  "theme_color": "#05050a",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}
