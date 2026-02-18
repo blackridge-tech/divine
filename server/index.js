@@ -4,11 +4,10 @@ const express = require("express");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const sqlite3 = require("sqlite3").verbose();
 const http = require("http");
 const WebSocket = require("ws");
-// jwt not working 
 const app = express();
 // trust proxy bug fix
 app.set("trust proxy", true);
@@ -31,10 +30,9 @@ function requireEnv(name) {
 const CONFIG = {
   port: parseInt(envStr("PORT", "3000"), 10),
   nodeEnv: envStr("NODE_ENV", "production"),
-  jwtSecret: requireEnv("JWT_SECRET"),
   authPin: requireEnv("AUTH_PIN"),
   ownerPin: requireEnv("OWNER_PIN"),
-  jwtExpiresDays: parseInt(envStr("JWT_EXPIRES_DAYS", "7"), 10) || 7,
+  accessExpiresDays: parseInt(envStr("ACCESS_EXPIRES_DAYS", "7"), 10) || 7,
   dbPath: envStr("DB_PATH", "./data/divine.sqlite"),
 
   // Env fallback only. Real lockdown state is stored in DB.
@@ -49,8 +47,9 @@ const CONFIG = {
   usernameCooldownDays: 14,
 };
 
-const COOKIE_USER = "dv_auth";
+const COOKIE_USER = "divine_access";
 const COOKIE_OWNER_ONCE = "dv_owner_once";
+const ownerOnceTokens = new Map();
 
 // -----------------------
 // Helpers
@@ -69,66 +68,89 @@ function getReqIp(req) {
   return req.ip || "";
 }
 
-function signUserJwt(payload) {
-  const exp = `${CONFIG.jwtExpiresDays}d`;
-  return jwt.sign(payload, CONFIG.jwtSecret, { expiresIn: exp });
+function accessCookieMaxAgeMs() {
+  return CONFIG.accessExpiresDays * 24 * 60 * 60 * 1000;
 }
 
-function verifyUserJwt(token) {
-  try {
-    return jwt.verify(token, CONFIG.jwtSecret);
-  } catch {
-    return null;
-  }
+function randomToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString("base64url");
 }
 
 function setUserCookie(res, token) {
   const isProd = CONFIG.nodeEnv === "production";
   res.cookie(COOKIE_USER, token, {
-    httpOnly: true,
-    sameSite: "None",
+    httpOnly: false,
+    sameSite: "Lax",
     secure: isProd,
     path: "/",
-    maxAge: CONFIG.jwtExpiresDays * 24 * 60 * 60 * 1000,
+    maxAge: accessCookieMaxAgeMs(),
   });
 }
 
 function clearUserCookie(res) {
   const isProd = CONFIG.nodeEnv === "production";
   res.cookie(COOKIE_USER, "", {
-    httpOnly: true,
-    sameSite: "None",
+    httpOnly: false,
+    sameSite: "Lax",
     secure: isProd,
     path: "/",
     maxAge: 0,
   });
 }
 
+async function issueUserSession(res, userId) {
+  const token = randomToken(32);
+  const expiresAt = nowMs() + accessCookieMaxAgeMs();
+  await dbRun(
+    `INSERT INTO user_sessions(session_token, user_id, created_at, expires_at) VALUES(?,?,?,?)`,
+    [token, String(userId), nowMs(), expiresAt]
+  );
+  setUserCookie(res, token);
+}
+
+async function revokeUserSessions(userId) {
+  await dbRun(`DELETE FROM user_sessions WHERE user_id=?`, [String(userId)]);
+}
+
+async function revokeCurrentSession(req) {
+  const tok = req.cookies[COOKIE_USER];
+  if (!tok) return;
+  await dbRun(`DELETE FROM user_sessions WHERE session_token=?`, [String(tok)]);
+}
+
 function issueOwnerOnceCookie(res) {
   const isProd = CONFIG.nodeEnv === "production";
-  const token = jwt.sign({ ok: true, t: Date.now() }, CONFIG.jwtSecret, { expiresIn: "5m" });
+  const token = randomToken(24);
+  ownerOnceTokens.set(token, nowMs() + (5 * 60 * 1000));
   res.cookie(COOKIE_OWNER_ONCE, token, {
     httpOnly: true,
-    sameSite: "None",
+    sameSite: "Lax",
     secure: isProd,
     path: "/owner",
     maxAge: 5 * 60 * 1000,
   });
 }
 
-function consumeOwnerOnceCookie(req, res) {
-  const tok = req.cookies[COOKIE_OWNER_ONCE];
+function isValidOwnerOnceToken(tok) {
   if (!tok) return false;
-  try {
-    jwt.verify(tok, CONFIG.jwtSecret);
-  } catch {
+  const exp = ownerOnceTokens.get(String(tok));
+  if (!exp) return false;
+  if (nowMs() >= exp) {
+    ownerOnceTokens.delete(String(tok));
     return false;
   }
+  return true;
+}
+
+function consumeOwnerOnceCookie(req, res) {
+  const tok = req.cookies[COOKIE_OWNER_ONCE];
+  if (!isValidOwnerOnceToken(tok)) return false;
+  ownerOnceTokens.delete(String(tok));
 
   const isProd = CONFIG.nodeEnv === "production";
   res.cookie(COOKIE_OWNER_ONCE, "", {
     httpOnly: true,
-    sameSite: "None",
+    sameSite: "Lax",
     secure: isProd,
     path: "/owner",
     maxAge: 0,
@@ -257,6 +279,16 @@ CREATE TABLE IF NOT EXISTS users (
   ban_reason TEXT NOT NULL DEFAULT '',
   username_changed_at INTEGER NOT NULL DEFAULT 0
 );`);
+
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS user_sessions (
+  session_token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at);`);
 
   await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);`);
 
@@ -417,16 +449,17 @@ async function updateLastIp(userId, ip) {
 async function verifyUserFromRequest(req) {
   const tok = req.cookies[COOKIE_USER];
   if (!tok) return null;
-  const payload = verifyUserJwt(tok);
-  if (!payload || !payload.uid) return null;
+  const session = await dbGet(`SELECT user_id, expires_at FROM user_sessions WHERE session_token=?`, [String(tok)]);
+  if (!session) return null;
 
-  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [String(payload.uid)]);
+  const expiresAt = parseInt(session.expires_at || "0", 10);
+  if (expiresAt && nowMs() >= expiresAt) {
+    await dbRun(`DELETE FROM user_sessions WHERE session_token=?`, [String(tok)]);
+    return null;
+  }
+
+  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [String(session.user_id)]);
   if (!user) return null;
-
-  const tvJwt = parseInt(payload.tv || "0", 10);
-  const tvDb = parseInt(user.token_version || "0", 10);
-  if (tvJwt !== tvDb) return null;
-
   return user;
 }
 
@@ -478,13 +511,7 @@ function requireOwner(req, res) {
   // we keep owner pin in a short 5m cookie, and allow API calls during that window.
   // The UI calls /owner/pin and then proceeds immediately.
   const tok = req.cookies[COOKIE_OWNER_ONCE];
-  if (!tok) {
-    res.status(401).json({ ok: false, error: "Owner auth required" });
-    return false;
-  }
-  try {
-    jwt.verify(tok, CONFIG.jwtSecret);
-  } catch {
+  if (!isValidOwnerOnceToken(tok)) {
     res.status(401).json({ ok: false, error: "Owner auth required" });
     return false;
   }
@@ -740,8 +767,7 @@ app.post("/api/register", async (req, res) => {
       [id, username, hash, email, "", createdAt, 0, "", 0, "", 0]
     );
 
-    const token = signUserJwt({ uid: id, tv: 0 });
-    setUserCookie(res, token);
+    await issueUserSession(res, id);
     return res.json({ ok: true });
   } catch {
     return res.status(500).json({ ok: false, error: "Server error" });
@@ -763,9 +789,7 @@ app.post("/api/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(403).json({ ok: false, error: "Invalid credentials" });
 
-    const tv = parseInt(user.token_version || "0", 10);
-    const token = signUserJwt({ uid: user.id, tv });
-    setUserCookie(res, token);
+    await issueUserSession(res, user.id);
 
     try { await updateLastIp(user.id, getReqIp(req)); } catch {}
     return res.json({ ok: true });
@@ -787,13 +811,15 @@ app.post("/api/recover", async (req, res) => {
 
     const hash = await bcrypt.hash(newPassword, 10);
     await dbRun(`UPDATE users SET password_hash=?, token_version=token_version+1 WHERE id=?`, [hash, userId]);
+    await revokeUserSessions(userId);
     return res.json({ ok: true });
   } catch {
     return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
 
-app.post("/api/logout", (req, res) => {
+app.post("/api/logout", async (req, res) => {
+  try { await revokeCurrentSession(req); } catch {}
   clearUserCookie(res);
   return res.json({ ok: true });
 });
@@ -1027,14 +1053,6 @@ app.post("/api/me/username", async (req, res) => {
 
     await dbRun(`UPDATE users SET username=?, username_changed_at=? WHERE id=?`, [newUsername, nowMs(), user.id]);
 
-    // revoke old tokens so JWT isn't stale
-    await dbRun(`UPDATE users SET token_version=token_version+1 WHERE id=?`, [user.id]);
-    const updated = await dbGet(`SELECT token_version FROM users WHERE id=?`, [user.id]);
-    const tv = parseInt(updated?.token_version || "0", 10);
-
-    const token = signUserJwt({ uid: user.id, tv });
-    setUserCookie(res, token);
-
     return res.json({ ok: true, username: newUsername });
   } catch {
     return res.status(500).json({ ok: false, error: "Server error" });
@@ -1143,6 +1161,7 @@ app.post("/api/owner/users/revoke", async (req, res) => {
     if (!u) return res.status(404).json({ ok: false, error: "User not found" });
 
     await dbRun(`UPDATE users SET token_version=token_version+1 WHERE id=?`, [u.id]);
+    await revokeUserSessions(u.id);
     return res.json({ ok: true });
   } catch {
     return res.status(500).json({ ok: false, error: "Server error" });
@@ -1296,6 +1315,7 @@ app.post("/api/owner/ban", async (req, res) => {
 
     // revoke tokens immediately
     await dbRun(`UPDATE users SET token_version=token_version+1 WHERE id=?`, [u.id]);
+    await revokeUserSessions(u.id);
 
     return res.json({ ok: true });
   } catch {
@@ -1316,6 +1336,7 @@ app.post("/api/owner/unban", async (req, res) => {
     await dbRun(`UPDATE users SET banned_until=0, ban_reason='' WHERE id=?`, [u.id]);
     // revoke tokens just in case
     await dbRun(`UPDATE users SET token_version=token_version+1 WHERE id=?`, [u.id]);
+    await revokeUserSessions(u.id);
 
     return res.json({ ok: true });
   } catch {
@@ -2053,28 +2074,28 @@ wss.on("connection", async (ws, req) => {
       });
     }
 
-    // Verify JWT
+    // Verify access session cookie
     const token = cookies[COOKIE_USER];
     if (!token) {
       ws.close(4001, "Unauthorized");
       return;
     }
 
-    const payload = verifyUserJwt(token);
-    if (!payload || !payload.uid) {
+    const session = await dbGet(`SELECT user_id, expires_at FROM user_sessions WHERE session_token=?`, [String(token)]);
+    if (!session) {
       ws.close(4001, "Unauthorized");
       return;
     }
 
-    const user = await dbGet(`SELECT * FROM users WHERE id=?`, [String(payload.uid)]);
+    const expiresAt = parseInt(session.expires_at || "0", 10);
+    if (expiresAt && nowMs() >= expiresAt) {
+      await dbRun(`DELETE FROM user_sessions WHERE session_token=?`, [String(token)]);
+      ws.close(4001, "Unauthorized");
+      return;
+    }
+
+    const user = await dbGet(`SELECT * FROM users WHERE id=?`, [String(session.user_id)]);
     if (!user) {
-      ws.close(4001, "Unauthorized");
-      return;
-    }
-
-    const tvJwt = parseInt(payload.tv || "0", 10);
-    const tvDb = parseInt(user.token_version || "0", 10);
-    if (tvJwt !== tvDb) {
       ws.close(4001, "Unauthorized");
       return;
     }

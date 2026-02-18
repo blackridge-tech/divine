@@ -276,6 +276,49 @@ a{ text-decoration:none; color:inherit; }
   text-decoration: underline;
 }
 
+.membership-row{
+  display:flex;
+  justify-content:center;
+  margin-top: 2px;
+}
+
+.membership-btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width: min(100%, 340px);
+  padding: var(--tile-padding);
+  border-radius: var(--tile-radius);
+  font-size: 1.05rem;
+  font-weight: 1000;
+  letter-spacing: 0.02em;
+  color: #140b1f;
+  background: linear-gradient(135deg, #6d2bd6 10%, #a34bff 52%, #ff4fd8 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 16px 46px rgba(0,0,0,0.55);
+  transition: transform .16s cubic-bezier(.2,1.1,.2,1), box-shadow .16s, filter .16s;
+  position:relative;
+  overflow:hidden;
+}
+
+.membership-btn::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  background: radial-gradient(closest-side at 30% 20%, rgba(255,255,255,0.28), transparent 55%);
+  opacity: 0.25;
+  pointer-events:none;
+}
+
+.membership-btn:hover,
+.membership-btn:focus{
+  transform: translateY(-4px) scale(1.015);
+  box-shadow: 0 30px 80px rgba(163,75,255,0.22), 0 16px 46px rgba(0,0,0,0.55);
+  filter: saturate(1.05);
+  outline: none;
+  text-decoration: underline;
+}
+
 .meta{
   display:flex;
   justify-content:center;
