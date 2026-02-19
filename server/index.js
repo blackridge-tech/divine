@@ -516,6 +516,42 @@ function generateThreadId(userIdA, userIdB) {
   return `${sorted[0]}__${sorted[1]}`;
 }
 
+// -------- Client access control helpers --------
+async function getOrCreateClient(clientId, ip, deviceInfo = null) {
+  const now = nowMs();
+  let client = await dbGet(`SELECT * FROM clients WHERE client_id=?`, [clientId]);
+  
+  if (!client) {
+    // New client - default to verified status
+    await dbRun(
+      `INSERT INTO clients(client_id, status, last_seen_at, last_ip, device_info, created_at) VALUES(?,?,?,?,?,?)`,
+      [clientId, "verified", now, ip, deviceInfo, now]
+    );
+    return { client_id: clientId, status: "verified", last_seen_at: now, last_ip: ip, device_info: deviceInfo, created_at: now };
+  }
+  
+  return client;
+}
+
+function safeStringifyDevice(device) {
+  try {
+    if (!device || typeof device !== "object") return "{}";
+    
+    // Limit the size and depth to prevent abuse
+    const safe = {
+      ua: clampStr(String(device.ua || ""), 500),
+      platform: clampStr(String(device.platform || ""), 100),
+      language: clampStr(String(device.language || ""), 50),
+      timezone: clampStr(String(device.timezone || ""), 100),
+      screen: clampStr(String(device.screen || ""), 50)
+    };
+    
+    return JSON.stringify(safe);
+  } catch {
+    return "{}";
+  }
+}
+
 // -------- Owner auth helper for APIs (must be called after /owner cookie middleware in chain) --------
 function requireOwner(req, res) {
   // Owner cookie is consumed in /owner middleware for page loads.
@@ -852,24 +888,12 @@ app.post("/api/check", async (req, res) => {
     if (!clientId) return res.status(400).json({ ok: false, error: "Missing clientID" });
 
     const ip = getReqIp(req);
-    const now = nowMs();
-
-    // Get or create client record
-    let client = await dbGet(`SELECT * FROM clients WHERE client_id=?`, [clientId]);
+    const client = await getOrCreateClient(clientId, ip);
     
-    if (!client) {
-      // New client - default to verified status
-      await dbRun(
-        `INSERT INTO clients(client_id, status, last_seen_at, last_ip, created_at) VALUES(?,?,?,?,?)`,
-        [clientId, "verified", now, ip, now]
-      );
-      return res.json({ ok: true, status: "verified", allowed: true });
-    }
-
     // Update last seen
     await dbRun(
       `UPDATE clients SET last_seen_at=?, last_ip=? WHERE client_id=?`,
-      [now, ip, clientId]
+      [nowMs(), ip, clientId]
     );
 
     const status = String(client.status || "verified");
@@ -877,7 +901,8 @@ app.post("/api/check", async (req, res) => {
     const allowed = status === "verified";
 
     return res.json({ ok: true, status, banned, allowed });
-  } catch {
+  } catch (err) {
+    console.error("Error in /api/check:", err);
     return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
@@ -888,29 +913,21 @@ app.post("/api/hello", async (req, res) => {
     if (!clientId) return res.status(400).json({ ok: false, error: "Missing clientID" });
 
     const device = req.body?.device || {};
-    const deviceInfo = JSON.stringify(device);
+    const deviceInfo = safeStringifyDevice(device);
     const ip = getReqIp(req);
     const now = nowMs();
 
-    // Get or create client record
-    let client = await dbGet(`SELECT * FROM clients WHERE client_id=?`, [clientId]);
+    const client = await getOrCreateClient(clientId, ip, deviceInfo);
     
-    if (!client) {
-      // New client
-      await dbRun(
-        `INSERT INTO clients(client_id, status, last_seen_at, last_ip, device_info, created_at) VALUES(?,?,?,?,?,?)`,
-        [clientId, "verified", now, ip, deviceInfo, now]
-      );
-    } else {
-      // Update existing client with device info
-      await dbRun(
-        `UPDATE clients SET last_seen_at=?, last_ip=?, device_info=? WHERE client_id=?`,
-        [now, ip, deviceInfo, clientId]
-      );
-    }
+    // Update existing client with device info
+    await dbRun(
+      `UPDATE clients SET last_seen_at=?, last_ip=?, device_info=? WHERE client_id=?`,
+      [now, ip, deviceInfo, clientId]
+    );
 
     return res.json({ ok: true });
-  } catch {
+  } catch (err) {
+    console.error("Error in /api/hello:", err);
     return res.status(500).json({ ok: false, error: "Server error" });
   }
 });
