@@ -1974,7 +1974,9 @@ app.use("/divine", async (req, res, next) => {
         clearUserCookie(res);
         return res.redirect(302, "/banned");
       }
-    } catch {}
+    } catch (e) {
+      console.error("Ban check error:", e);
+    }
 
     // One-time redirect tool
     try {
