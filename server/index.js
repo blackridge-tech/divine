@@ -1969,10 +1969,12 @@ app.use("/divine", async (req, res, next) => {
     try { await updateLastIp(user.id, getReqIp(req)); } catch {}
     try { await updateLastSeen(user.id); } catch {}
 
-    if (await isUserBanned(user)) {
-      clearUserCookie(res);
-      return res.redirect(302, "/banned");
-    }
+    try {
+      if (await isUserBanned(user)) {
+        clearUserCookie(res);
+        return res.redirect(302, "/banned");
+      }
+    } catch {}
 
     // One-time redirect tool
     try {
