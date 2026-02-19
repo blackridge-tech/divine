@@ -181,6 +181,14 @@ function clampStr(s, maxLen) {
   return x.length > maxLen ? x.slice(0, maxLen) : x;
 }
 
+function validClientId(cid) {
+  if (!cid || typeof cid !== "string") return false;
+  if (cid.length < 8 || cid.length > 128) return false;
+  // Allow alphanumeric, hyphens, and underscores (typical UUID/GUID format)
+  if (!/^[a-zA-Z0-9_-]+$/.test(cid)) return false;
+  return true;
+}
+
 function fmtTimeSec(ms) {
   try {
     const d = new Date(Number(ms || 0));
@@ -424,6 +432,18 @@ CREATE TABLE IF NOT EXISTS dm_appeals (
 );`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_appeals_status ON dm_appeals(status, created_at);`);
 
+  // Client tracking table for /api/check and /api/hello
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS clients (
+  client_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'verified',
+  last_seen_at INTEGER NOT NULL,
+  last_ip TEXT,
+  device_info TEXT,
+  created_at INTEGER NOT NULL
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);`);
+
   // Ensure a default lockdown value exists (env is fallback only)
   const existing = await dbGet(`SELECT v FROM owner_state WHERE k='lockdown_enabled'`);
   if (!existing) {
@@ -502,6 +522,48 @@ function generateThreadId(userIdA, userIdB) {
   // Always sort to ensure consistent thread ID for both users
   const sorted = [String(userIdA), String(userIdB)].sort();
   return `${sorted[0]}__${sorted[1]}`;
+}
+
+// -------- Client access control helpers --------
+async function getOrCreateClient(clientId, ip, deviceInfo = null) {
+  const now = nowMs();
+  let client = await dbGet(`SELECT * FROM clients WHERE client_id=?`, [clientId]);
+  
+  if (!client) {
+    // New client - default to verified status
+    await dbRun(
+      `INSERT INTO clients(client_id, status, last_seen_at, last_ip, device_info, created_at) VALUES(?,?,?,?,?,?)`,
+      [clientId, "verified", now, ip, deviceInfo, now]
+    );
+    return { client_id: clientId, status: "verified", last_seen_at: now, last_ip: ip, device_info: deviceInfo, created_at: now };
+  }
+  
+  // Update last seen and device info for existing client
+  await dbRun(
+    `UPDATE clients SET last_seen_at=?, last_ip=?, device_info=COALESCE(?, device_info) WHERE client_id=?`,
+    [now, ip, deviceInfo, clientId]
+  );
+  
+  return client;
+}
+
+function safeStringifyDevice(device) {
+  try {
+    if (!device || typeof device !== "object") return "{}";
+    
+    // Limit the size and depth to prevent abuse
+    const safe = {
+      ua: clampStr(String(device.ua || ""), 500),
+      platform: clampStr(String(device.platform || ""), 100),
+      language: clampStr(String(device.language || ""), 50),
+      timezone: clampStr(String(device.timezone || ""), 100),
+      screen: clampStr(String(device.screen || ""), 50)
+    };
+    
+    return JSON.stringify(safe);
+  } catch {
+    return "{}";
+  }
 }
 
 // -------- Owner auth helper for APIs (must be called after /owner cookie middleware in chain) --------
@@ -632,6 +694,15 @@ const sendRepoFile = (res, relPath) => res.sendFile(path.join(REPO_ROOT, relPath
 // Under construction at / (served with/without hidden trigger depending on lockdown)
 app.get("/", async (req, res) => {
   try {
+    // Check if user has access cookie - if so, redirect to /divine
+    // Only verify if cookie exists to avoid unnecessary DB queries
+    if (req.cookies[COOKIE_USER]) {
+      const user = await verifyUserFromRequest(req);
+      if (user) {
+        return res.redirect(302, "/divine/");
+      }
+    }
+
     const enabled = await getLockdownEnabled();
     if (enabled) {
       const f = path.join(REPO_ROOT, "index.lockdown.html");
@@ -825,6 +896,46 @@ app.post("/api/logout", async (req, res) => {
   try { await revokeCurrentSession(req); } catch {}
   clearUserCookie(res);
   return res.json({ ok: true });
+});
+
+// Client access control endpoints for clientID-based flow
+app.post("/api/check", async (req, res) => {
+  try {
+    const clientId = String(req.body?.clientID || "").trim();
+    if (!clientId) return res.status(400).json({ ok: false, error: "Missing clientID" });
+    if (!validClientId(clientId)) return res.status(400).json({ ok: false, error: "Invalid clientID format" });
+
+    const ip = getReqIp(req);
+    const client = await getOrCreateClient(clientId, ip);
+
+    const status = String(client.status || "verified");
+    const banned = status === "banned";
+    const allowed = status === "verified";
+
+    return res.json({ ok: true, status, banned, allowed });
+  } catch (err) {
+    console.error("Error in /api/check:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+app.post("/api/hello", async (req, res) => {
+  try {
+    const clientId = String(req.body?.clientID || "").trim();
+    if (!clientId) return res.status(400).json({ ok: false, error: "Missing clientID" });
+    if (!validClientId(clientId)) return res.status(400).json({ ok: false, error: "Invalid clientID format" });
+
+    const device = req.body?.device || {};
+    const deviceInfo = safeStringifyDevice(device);
+    const ip = getReqIp(req);
+
+    await getOrCreateClient(clientId, ip, deviceInfo);
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("Error in /api/hello:", err);
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
 });
 
 // Ban info and appeal page
