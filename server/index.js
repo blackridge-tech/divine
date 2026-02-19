@@ -632,6 +632,12 @@ const sendRepoFile = (res, relPath) => res.sendFile(path.join(REPO_ROOT, relPath
 // Under construction at / (served with/without hidden trigger depending on lockdown)
 app.get("/", async (req, res) => {
   try {
+    // Check if user has access cookie - if so, redirect to /divine
+    const user = await verifyUserFromRequest(req);
+    if (user) {
+      return res.redirect(302, "/divine/");
+    }
+
     const enabled = await getLockdownEnabled();
     if (enabled) {
       const f = path.join(REPO_ROOT, "index.lockdown.html");
