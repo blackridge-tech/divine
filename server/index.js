@@ -2162,7 +2162,7 @@ app.get("/divine/u/:username", (req, res) => sendRepoFile(res, "divine/user/inde
 // -----------------------
 app.use(express.static(REPO_ROOT, {
   extensions: ["html"],
-  index: false,
+  index: "index.html",  // Enable serving index.html for directory requests
   maxAge: CONFIG.nodeEnv === "production" ? "1h" : 0,
 }));
 
