@@ -36,6 +36,9 @@ const CONFIG = {
   jwtSecret: requireEnv("JWT_SECRET"),
   accessExpiresDays: parseInt(envStr("ACCESS_EXPIRES_DAYS", "7"), 10) || 7,
   dbPath: envStr("DB_PATH", "./data/divine.sqlite"),
+  exportDir: envStr("EXPORT_DIR", "./data/exports"),
+  exportIncludeIp: envStr("EXPORT_INCLUDE_IP", "0") === "1",
+  activationExpiresHours: parseInt(envStr("ACTIVATION_EXPIRES_HOURS", "12"), 10) || 12,
 
   // Env fallback only. Real lockdown state is stored in DB.
   lockdownEnabledEnv: envStr("LOCKDOWN_ENABLED", "0") === "1",
@@ -51,6 +54,7 @@ const CONFIG = {
 
 const COOKIE_USER = "divine_access";
 const COOKIE_OWNER_ONCE = "dv_owner_once";
+const COOKIE_ACTIVATION = "dv_activated";
 const ownerOnceTokens = new Map();
 
 // -----------------------
@@ -304,7 +308,9 @@ CREATE TABLE IF NOT EXISTS users (
   last_ip TEXT NOT NULL DEFAULT '',
   banned_until INTEGER NOT NULL DEFAULT 0,
   ban_reason TEXT NOT NULL DEFAULT '',
-  username_changed_at INTEGER NOT NULL DEFAULT 0
+  username_changed_at INTEGER NOT NULL DEFAULT 0,
+  activated_at INTEGER NOT NULL DEFAULT 0,
+  activation_token TEXT NOT NULL DEFAULT ''
 );`);
 
   await dbRun(`
@@ -497,152 +503,116 @@ async function verifyUserFromRequest(req) {
   return user;
 }
 
-function msUntilUsernameChangeAllowed(user) {
-  const last = parseInt(user.username_changed_at || "0", 10);
-  const cooldownMs = CONFIG.usernameCooldownDays * 24 * 60 * 60 * 1000;
-  const nextOk = last + cooldownMs;
-  const rem = nextOk - nowMs();
-  return rem > 0 ? rem : 0;
-}
+async function verifyActivationFromRequest(req) {
+  const tok = String(req.cookies[COOKIE_ACTIVATION] || "").trim();
+  if (!tok) return null;
 
-async function requireUser(req, res) {
-  const user = await verifyUserFromRequest(req);
-  if (!user) {
-    res.status(401).json({ ok: false, error: "Unauthorized" });
-    return null;
-  }
-  try { await updateLastIp(user.id, getReqIp(req)); } catch {}
-  if (await isUserBanned(user)) {
-    clearUserCookie(res);
-    res.status(403).json({ ok: false, error: "Banned" });
-    return null;
-  }
-  return user;
-}
-
-// -------- DM ban helpers --------
-async function isUserDmBanned(userId) {
-  const row = await dbGet(`SELECT banned_until FROM dm_bans WHERE user_id=?`, [String(userId)]);
-  if (!row) return false;
-  const until = parseInt(row.banned_until || "0", 10);
-  return until && nowMs() < until;
-}
-
-async function getDmBan(userId) {
-  return await dbGet(`SELECT * FROM dm_bans WHERE user_id=?`, [String(userId)]);
-}
-
-function generateThreadId(userIdA, userIdB) {
-  // Always sort to ensure consistent thread ID for both users
-  const sorted = [String(userIdA), String(userIdB)].sort();
-  return `${sorted[0]}__${sorted[1]}`;
-}
-
-// -------- Client access control helpers --------
-async function getOrCreateClient(clientId, ip, deviceInfo = null) {
-  const now = nowMs();
-  let client = await dbGet(`SELECT * FROM clients WHERE client_id=?`, [clientId]);
-  
-  if (!client) {
-    // New client - default to verified status
-    await dbRun(
-      `INSERT INTO clients(client_id, status, last_seen_at, last_ip, device_info, created_at) VALUES(?,?,?,?,?,?)`,
-      [clientId, "verified", now, ip, deviceInfo, now]
-    );
-    return { client_id: clientId, status: "verified", last_seen_at: now, last_ip: ip, device_info: deviceInfo, created_at: now };
-  }
-  
-  // Update last seen and device info for existing client
-  await dbRun(
-    `UPDATE clients SET last_seen_at=?, last_ip=?, device_info=COALESCE(?, device_info) WHERE client_id=?`,
-    [now, ip, deviceInfo, clientId]
+  const row = await dbGet(
+    `SELECT token, expires_at, consumed_at FROM activation_tokens WHERE token=?`,
+    [tok]
   );
-  
-  return client;
+  if (!row) return null;
+
+  const expiresAt = Number(row.expires_at || 0);
+  const consumedAt = Number(row.consumed_at || 0);
+
+  if (consumedAt > 0) return null;
+  if (!expiresAt || nowMs() >= expiresAt) return null;
+
+  return { token: row.token, expiresAt };
 }
 
-function safeStringifyDevice(device) {
-  try {
-    if (!device || typeof device !== "object") return "{}";
-    
-    // Limit the size and depth to prevent abuse
-    const safe = {
-      ua: clampStr(String(device.ua || ""), 500),
-      platform: clampStr(String(device.platform || ""), 100),
-      language: clampStr(String(device.language || ""), 50),
-      timezone: clampStr(String(device.timezone || ""), 100),
-      screen: clampStr(String(device.screen || ""), 50)
-    };
-    
-    return JSON.stringify(safe);
-  } catch {
-    return "{}";
-  }
+async function consumeActivationForUser(req, res, userId) {
+  const tok = String(req.cookies[COOKIE_ACTIVATION] || "").trim();
+  if (!tok) return;
+
+  const now = nowMs();
+  const row = await dbGet(
+    `SELECT token, expires_at, consumed_at FROM activation_tokens WHERE token=?`,
+    [tok]
+  );
+  if (!row) return;
+
+  const expiresAt = Number(row.expires_at || 0);
+  const consumedAt = Number(row.consumed_at || 0);
+  if (consumedAt > 0) return;
+  if (!expiresAt || now >= expiresAt) return;
+
+  await dbRun(
+    `UPDATE activation_tokens
+     SET consumed_at=?, consumed_by_user_id=?
+     WHERE token=? AND consumed_at=0`,
+    [now, String(userId), tok]
+  );
+
+  await dbRun(
+    `UPDATE users
+     SET activated_at=CASE WHEN activated_at>0 THEN activated_at ELSE ? END,
+         activation_token=CASE WHEN activation_token<>'' THEN activation_token ELSE ? END
+     WHERE id=?`,
+    [now, tok, String(userId)]
+  );
+
+  clearActivationCookie(res);
 }
 
-// -------- Owner auth helper for APIs (must be called after /owner cookie middleware in chain) --------
-function requireOwner(req, res) {
-  // Owner cookie is consumed in /owner middleware for page loads.
-  // For API calls, we require a fresh pin cookie too, but because you wanted "every reload",
-  // we keep owner pin in a short 5m cookie, and allow API calls during that window.
-  // The UI calls /owner/pin and then proceeds immediately.
-  const tok = req.cookies[COOKIE_OWNER_ONCE];
-  if (!isValidOwnerOnceToken(tok)) {
-    res.status(401).json({ ok: false, error: "Owner auth required" });
-    return false;
-  }
-  return true;
-}
+async function writeSafeExports() {
+  const dir = CONFIG.exportDir;
+  fs.mkdirSync(dir, { recursive: true });
 
-// -------- Owner state helpers --------
-async function getLockdownEnabled() {
-  const row = await dbGet(`SELECT v FROM owner_state WHERE k='lockdown_enabled'`);
-  if (!row) return false;
-  return String(row.v) === "1";
-}
+  const now = nowMs();
 
-async function setLockdownEnabled(enabled) {
-  await dbRun(`INSERT INTO owner_state(k,v) VALUES('lockdown_enabled',?)
-               ON CONFLICT(k) DO UPDATE SET v=excluded.v`, [enabled ? "1" : "0"]);
-}
+  const users = await dbAll(
+    `SELECT id, username, bio, created_at, last_seen_at, last_ip, banned_until, ban_reason, username_changed_at, activated_at
+     FROM users
+     ORDER BY created_at DESC`
+  );
 
-// -------- Activity --------
-async function logActivity(user, reqPath, reqIp) {
-  try {
-    await dbRun(
-      `INSERT INTO activity(created_at, user_id, username, path, ip) VALUES(?,?,?,?,?)`,
-      [nowMs(), String(user.id), String(user.username), clampStr(reqPath, 260), clampStr(reqIp, 80)]
-    );
-  } catch {}
-}
+  const dmBans = await dbAll(
+    `SELECT db.user_id, u.username, db.banned_until, db.ban_reason, db.created_at
+     FROM dm_bans db
+     JOIN users u ON u.id=db.user_id
+     ORDER BY db.banned_until DESC`
+  );
 
-// -------- Redirect-on-next-load --------
-async function getAndConsumeRedirect(userId) {
-  const row = await dbGet(`SELECT url FROM user_redirects WHERE user_id=?`, [String(userId)]);
-  if (!row || !row.url) return "";
-  // consume
-  await dbRun(`DELETE FROM user_redirects WHERE user_id=?`, [String(userId)]);
-  return String(row.url);
-}
+  const safeUsers = users.map(u => ({
+    id: String(u.id),
+    username: String(u.username),
+    bio: String(u.bio || ""),
+    createdAt: Number(u.created_at || 0),
+    lastSeenAt: Number(u.last_seen_at || 0),
+    usernameChangedAt: Number(u.username_changed_at || 0),
+    activatedAt: Number(u.activated_at || 0),
+    bannedUntil: Number(u.banned_until || 0),
+    banReason: String(u.ban_reason || ""),
+    ...(CONFIG.exportIncludeIp ? { lastIp: String(u.last_ip || "") } : {}),
+  }));
 
-// -------- Ban duration parsing --------
-function parseDurationToMs(input) {
-  const s = String(input || "").trim().toLowerCase();
-  if (!s) return null;
-  if (s === "permanent" || s === "perm" || s === "forever") return Infinity;
+  const safeDmBans = dmBans.map(b => ({
+    userId: String(b.user_id),
+    username: String(b.username),
+    bannedUntil: Number(b.banned_until || 0),
+    banReason: String(b.ban_reason || ""),
+    createdAt: Number(b.created_at || 0),
+  }));
 
-  // supports: 10m, 1h, 2d
-  const m = s.match(/^(\d+)\s*([mhd])$/);
-  if (!m) return null;
-  const n = parseInt(m[1], 10);
-  const unit = m[2];
-
-  if (!Number.isFinite(n) || n <= 0) return null;
-
-  if (unit === "m") return n * 60 * 1000;
-  if (unit === "h") return n * 60 * 60 * 1000;
-  if (unit === "d") return n * 24 * 60 * 60 * 1000;
-  return null;
+  fs.writeFileSync(path.join(dir, "users.json"), JSON.stringify(safeUsers, null, 2));
+  fs.writeFileSync(path.join(dir, "dm_bans.json"), JSON.stringify(safeDmBans, null, 2));
+  fs.writeFileSync(
+    path.join(dir, "meta.json"),
+    JSON.stringify(
+      {
+        generatedAt: now,
+        counts: { users: safeUsers.length, dmBans: safeDmBans.length },
+        notes: [
+          "Safe export only (no password hashes, no JWTs, no cookies, no secrets).",
+          `includeIp=${CONFIG.exportIncludeIp}`,
+        ],
+      },
+      null,
+      2
+    )
+  );
 }
 
 // -----------------------
@@ -726,6 +696,18 @@ app.get("/", async (req, res) => {
   return sendRepoFile(res, "index.html");
 });
 
+app.get("/index.html", async (req, res) => {
+  try {
+    if (req.cookies[COOKIE_USER]) {
+      const user = await verifyUserFromRequest(req);
+      if (user) {
+        return res.redirect(302, "/divine/");
+      }
+    }
+  } catch {}
+  return sendRepoFile(res, "index.html");
+});
+
 // Activation pages (blocked during lockdown)
 app.get("/activate", async (req, res) => {
   try {
@@ -789,7 +771,7 @@ app.use(async (req, res, next) => {
 // -----------------------
 
 // User PIN gate with lockout
-app.post("/api/activate", (req, res) => {
+app.post("/api/activate", async (req, res) => {
   const ip = getReqIp(req);
 
   if (isLocked(pinLocks.user, ip)) {
@@ -809,6 +791,28 @@ app.post("/api/activate", (req, res) => {
   }
 
   registerSuccess(pinLocks.user, ip);
+
+  // issue activation token + cookie (NOT auth)
+  try {
+    const issuedAt = nowMs();
+    const expiresAt = issuedAt + activationCookieMaxAgeMs();
+
+    let token = randomToken(24);
+    for (let i = 0; i < 5; i++) {
+      const exists = await dbGet(`SELECT token FROM activation_tokens WHERE token=?`, [token]);
+      if (!exists) break;
+      token = randomToken(24);
+    }
+
+    await dbRun(
+      `INSERT INTO activation_tokens(token, issued_at, expires_at, last_ip, consumed_at, consumed_by_user_id)
+       VALUES(?,?,?,?,0,'')`,
+      [token, issuedAt, expiresAt, clampStr(ip, 80)]
+    );
+
+    setActivationCookie(res, token);
+  } catch {}
+
   return res.json({ ok: true });
 });
 
@@ -839,12 +843,14 @@ app.post("/api/register", async (req, res) => {
     const createdAt = nowMs();
 
     await dbRun(
-      `INSERT INTO users(id, username, password_hash, email, bio, created_at, token_version, last_ip, banned_until, ban_reason, username_changed_at)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-      [id, username, hash, email, "", createdAt, 0, "", 0, "", 0]
+      `INSERT INTO users(id, username, password_hash, email, bio, created_at, token_version, last_ip, banned_until, ban_reason, username_changed_at, activated_at, activation_token)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, username, hash, email, "", createdAt, 0, "", 0, "", 0, 0, ""]
     );
 
     await issueUserSession(res, id);
+    try { await consumeActivationForUser(req, res, id); } catch {}
+
     return res.json({ ok: true });
   } catch {
     return res.status(500).json({ ok: false, error: "Server error" });
@@ -867,8 +873,8 @@ app.post("/api/login", async (req, res) => {
     if (!ok) return res.status(403).json({ ok: false, error: "Invalid credentials" });
 
     await issueUserSession(res, user.id);
+    try { await consumeActivationForUser(req, res, user.id); } catch {}
 
-    try { await updateLastIp(user.id, getReqIp(req)); } catch {}
     return res.json({ ok: true });
   } catch {
     return res.status(500).json({ ok: false, error: "Server error" });
@@ -2080,8 +2086,20 @@ app.get("/api/dm/ban-info", async (req, res) => {
 // -----------------------
 app.use("/divine", async (req, res, next) => {
   try {
+    const p = req.path || "/";
+    const isDivineHome = p === "/";
     const user = await verifyUserFromRequest(req);
-    if (!user) return res.redirect(302, "/");
+
+    if (!user) {
+      // must be "activated" to see /divine/
+      if (isDivineHome) {
+        const act = await verifyActivationFromRequest(req);
+        if (!act) return res.redirect(302, "/activate");
+        req.user = null;
+        return next();
+      }
+      return res.redirect(302, "/divine/");
+    }
 
     try { await updateLastIp(user.id, getReqIp(req)); } catch {}
     try { await updateLastSeen(user.id); } catch {}
@@ -2095,11 +2113,13 @@ app.use("/divine", async (req, res, next) => {
       console.error("Ban check error:", e);
     }
 
-    // One-time redirect tool
-    try {
-      const redir = await getAndConsumeRedirect(user.id);
-      if (redir) return res.redirect(302, redir);
-    } catch {}
+    // One-time redirect tool (skip on home page so users can see /divine first)
+    if (!isDivineHome) {
+      try {
+        const redir = await getAndConsumeRedirect(user.id);
+        if (redir) return res.redirect(302, redir);
+      } catch {}
+    }
 
     // Activity log
     try {
@@ -2261,11 +2281,13 @@ wss.on("connection", async (ws, req) => {
 
 // Start
 initDb()
-  .then(() => {
+  .then(async () => {
+    try { await writeSafeExports(); } catch {}
     server.listen(CONFIG.port, () => {
       console.log(`Divine server listening on :${CONFIG.port}`);
       console.log(`WebSocket server ready at ws://localhost:${CONFIG.port}/ws`);
       console.log(`DB: ${CONFIG.dbPath}`);
+      console.log(`Exports: ${CONFIG.exportDir}`);
     });
   })
   .catch((e) => {
