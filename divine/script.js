@@ -303,22 +303,130 @@
           credentials: 'same-origin'
         });
 
-        if (!res.ok) {
-          showGate();
-          return;
-        }
+        if (!res.ok) { showGate(); return; }
 
         const json = await res.json().catch(() => ({}));
-        if (!json || !json.ok || !json.user) {
-          showGate();
-          return;
-        }
+        if (!json || !json.ok || !json.user) { showGate(); return; }
 
         hideGate();
       } catch (e) {
         showGate();
       }
     }
+
+    // Tab switching
+    const tabLogin    = document.getElementById('gate-tab-login');
+    const tabRegister = document.getElementById('gate-tab-register');
+    const tabRecover  = document.getElementById('gate-tab-recover');
+    const panelLogin    = document.getElementById('gate-panel-login');
+    const panelRegister = document.getElementById('gate-panel-register');
+    const panelRecover  = document.getElementById('gate-panel-recover');
+
+    function selectTab(which) {
+      const isLogin = which === 'login';
+      const isReg   = which === 'register';
+      const isRec   = which === 'recover';
+      tabLogin.setAttribute('aria-selected', isLogin ? 'true' : 'false');
+      tabRegister.setAttribute('aria-selected', isReg ? 'true' : 'false');
+      tabRecover.setAttribute('aria-selected', isRec ? 'true' : 'false');
+      panelLogin.hidden    = !isLogin;
+      panelRegister.hidden = !isReg;
+      panelRecover.hidden  = !isRec;
+    }
+
+    tabLogin.addEventListener('click', () => selectTab('login'));
+    tabRegister.addEventListener('click', () => selectTab('register'));
+    tabRecover.addEventListener('click', () => selectTab('recover'));
+
+    function setMsg(el, text, kind) {
+      el.textContent = text || '';
+      el.className = 'auth-gate-msg' + (kind ? (' ' + kind) : '');
+    }
+
+    async function post(url, body) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {})
+      });
+      const json = await res.json().catch(() => ({}));
+      return { res, json };
+    }
+
+    // Login
+    const loginUser = document.getElementById('gate-login-user');
+    const loginPass = document.getElementById('gate-login-pass');
+    const loginBtn  = document.getElementById('gate-login-btn');
+    const loginMsg  = document.getElementById('gate-login-msg');
+
+    loginBtn.addEventListener('click', async () => {
+      const username = (loginUser.value || '').trim();
+      const password = (loginPass.value || '').trim();
+      if (!username || !password) { setMsg(loginMsg, 'Missing fields.', 'err'); return; }
+      loginBtn.disabled = true;
+      setMsg(loginMsg, 'Working…', '');
+      try {
+        const { res, json } = await post('/api/login', { username, password });
+        if (!res.ok || !json.ok) { setMsg(loginMsg, json.error || 'Login failed', 'err'); return; }
+        setMsg(loginMsg, 'Logged in. Redirecting…', 'ok');
+        setTimeout(() => location.reload(), 250);
+      } catch { setMsg(loginMsg, 'Request failed', 'err'); }
+      finally { loginBtn.disabled = false; }
+    });
+
+    // Register
+    const regUser    = document.getElementById('gate-reg-user');
+    const regEmail   = document.getElementById('gate-reg-email');
+    const regPass    = document.getElementById('gate-reg-pass');
+    const regPass2   = document.getElementById('gate-reg-pass2');
+    const regConsent = document.getElementById('gate-reg-consent');
+    const regEmails  = document.getElementById('gate-reg-emails');
+    const regBtn     = document.getElementById('gate-reg-btn');
+    const regMsg     = document.getElementById('gate-reg-msg');
+
+    regBtn.addEventListener('click', async () => {
+      const username  = (regUser.value || '').trim();
+      const email     = (regEmail.value || '').trim();
+      const password  = (regPass.value || '').trim();
+      const password2 = (regPass2.value || '').trim();
+      if (!username || !email || !password) { setMsg(regMsg, 'Missing fields.', 'err'); return; }
+      if (password !== password2) { setMsg(regMsg, 'Passwords do not match.', 'err'); return; }
+      if (!regConsent.checked) { setMsg(regMsg, 'You must consent to the agreement.', 'err'); return; }
+      regBtn.disabled = true;
+      setMsg(regMsg, 'Creating…', '');
+      try {
+        const { res, json } = await post('/api/register', {
+          username, email, password,
+          wantsEmails: !!regEmails.checked,
+          consent: true
+        });
+        if (!res.ok || !json.ok) { setMsg(regMsg, json.error || 'Register failed', 'err'); return; }
+        setMsg(regMsg, 'Created. Redirecting…', 'ok');
+        setTimeout(() => location.reload(), 250);
+      } catch { setMsg(regMsg, 'Request failed', 'err'); }
+      finally { regBtn.disabled = false; }
+    });
+
+    // Recover
+    const recId   = document.getElementById('gate-rec-id');
+    const recPass = document.getElementById('gate-rec-pass');
+    const recBtn  = document.getElementById('gate-rec-btn');
+    const recMsg  = document.getElementById('gate-rec-msg');
+
+    recBtn.addEventListener('click', async () => {
+      const userId      = (recId.value || '').trim();
+      const newPassword = (recPass.value || '').trim();
+      if (!userId || !newPassword) { setMsg(recMsg, 'Missing fields.', 'err'); return; }
+      recBtn.disabled = true;
+      setMsg(recMsg, 'Updating…', '');
+      try {
+        const { res, json } = await post('/api/recover', { userId, newPassword });
+        if (!res.ok || !json.ok) { setMsg(recMsg, json.error || 'Recover failed', 'err'); return; }
+        setMsg(recMsg, 'Password updated. Switch to Login.', 'ok');
+        setTimeout(() => selectTab('login'), 600);
+      } catch { setMsg(recMsg, 'Request failed', 'err'); }
+      finally { recBtn.disabled = false; }
+    });
 
     checkLoginState();
   })();

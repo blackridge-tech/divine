@@ -1,0 +1,11 @@
+{
+  "generatedAt": 1771727874046,
+  "counts": {
+    "users": 0,
+    "dmBans": 0
+  },
+  "notes": [
+    "Safe export only (no password hashes, no JWTs, no cookies, no secrets).",
+    "includeIp=false"
+  ]
+}
