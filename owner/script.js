@@ -761,6 +761,160 @@
     toast(fakeLockdown ? "Simulated lockdown ON." : "Simulated lockdown OFF.");
   });
 
+  // -------- Active Users (owner) --------
+  const loadOwnerActiveBtn = document.getElementById("loadOwnerActiveBtn");
+  const ownerActiveBody    = document.getElementById("ownerActiveBody");
+
+  async function loadOwnerActiveUsers() {
+    ownerActiveBody.innerHTML = `<tr><td colspan="4" class="muted">Loading…</td></tr>`;
+    try {
+      const { res, json } = await getJson("/api/owner/active-users");
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      const users = json.users || [];
+      if (!users.length) {
+        ownerActiveBody.innerHTML = `<tr><td colspan="4" class="muted">No active users.</td></tr>`;
+        return;
+      }
+      ownerActiveBody.innerHTML = users.map(u => `
+        <tr>
+          <td><strong>${esc(u.username)}</strong></td>
+          <td class="muted mini">${esc(u.last_seen || "—")}</td>
+          <td class="muted mini">${esc(u.last_ip || "—")}</td>
+          <td style="text-align:right">
+            <button class="btn ghost small" data-oact="revoke" data-user="${esc(u.username)}">↩️ Revoke</button>
+          </td>
+        </tr>`).join("");
+    } catch (e) {
+      ownerActiveBody.innerHTML = `<tr><td colspan="4" class="muted">${esc(String(e.message))}</td></tr>`;
+    }
+  }
+
+  if (loadOwnerActiveBtn) loadOwnerActiveBtn.addEventListener("click", () => { if (!unlocked) return showOverlay(); loadOwnerActiveUsers(); });
+  if (ownerActiveBody) ownerActiveBody.addEventListener("click", async (e) => {
+    const btn = e.target && e.target.closest && e.target.closest("button[data-oact]");
+    if (!btn) return;
+    const act = btn.dataset.oact;
+    const user = btn.dataset.user;
+    if (act === "revoke" && confirm(`Revoke all sessions for "${user}"?`)) {
+      try {
+        const { res, json } = await postJson("/api/mod/revoke", { username: user });
+        toast(res.ok ? `Revoked ${user}.` : (json.error || "Failed"));
+        if (res.ok) loadOwnerActiveUsers();
+      } catch { toast("Network error"); }
+    }
+  });
+
+  // -------- Block Activation --------
+  const blockActLight    = document.getElementById("blockActLight");
+  const blockActTitle    = document.getElementById("blockActTitle");
+  const toggleBlockActBtn = document.getElementById("toggleBlockActBtn");
+  const loadBlockActBtn  = document.getElementById("loadBlockActBtn");
+  const loadBlockedActLogBtn = document.getElementById("loadBlockedActLogBtn");
+  const blockedActLogBody    = document.getElementById("blockedActLogBody");
+
+  function setBlockActUi(enabled) {
+    if (!blockActLight || !blockActTitle) return;
+    blockActLight.style.background  = enabled ? "rgba(255,59,59,0.95)" : "rgba(255,255,255,0.25)";
+    blockActLight.style.boxShadow   = enabled ? "0 0 26px rgba(255,59,59,0.35)" : "0 0 26px rgba(255,255,255,0.18)";
+    blockActTitle.textContent = "Block Activation: " + (enabled ? "ON" : "OFF");
+  }
+
+  async function fetchBlockActState() {
+    try {
+      const { res, json } = await getJson("/api/owner/block-activation");
+      if (res.ok) setBlockActUi(Boolean(json.enabled));
+    } catch {}
+  }
+
+  if (loadBlockActBtn) loadBlockActBtn.addEventListener("click", () => { if (!unlocked) return showOverlay(); fetchBlockActState(); });
+  if (toggleBlockActBtn) toggleBlockActBtn.addEventListener("click", async () => {
+    if (!unlocked) return showOverlay();
+    try {
+      const { res, json } = await postJson("/api/owner/block-activation", { toggle: true });
+      if (!res.ok) { toast(json.error || "Failed"); return; }
+      setBlockActUi(Boolean(json.enabled));
+      toast(json.enabled ? "Activations blocked." : "Activations unblocked.");
+    } catch { toast("Network error"); }
+  });
+
+  async function loadBlockedActLog() {
+    if (!blockedActLogBody) return;
+    blockedActLogBody.innerHTML = `<tr><td colspan="5" class="muted">Loading…</td></tr>`;
+    try {
+      const { res, json } = await getJson("/api/owner/blocked-activations");
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      const rows = json.logs || [];
+      if (!rows.length) {
+        blockedActLogBody.innerHTML = `<tr><td colspan="5" class="muted">No entries.</td></tr>`;
+        return;
+      }
+      blockedActLogBody.innerHTML = rows.map(r => `
+        <tr>
+          <td class="muted mini">${esc(r.created_at || "")}</td>
+          <td>${esc(r.os || "—")}</td>
+          <td class="muted mini">${esc(r.ip || "—")}</td>
+          <td>${esc(r.reason || "os_block")}</td>
+          <td class="muted mini" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.user_agent || "")}">${esc(r.user_agent || "—")}</td>
+        </tr>`).join("");
+    } catch (e) {
+      blockedActLogBody.innerHTML = `<tr><td colspan="5" class="muted">${esc(String(e.message))}</td></tr>`;
+    }
+  }
+
+  if (loadBlockedActLogBtn) loadBlockedActLogBtn.addEventListener("click", () => { if (!unlocked) return showOverlay(); loadBlockedActLog(); });
+
+  // -------- Mod Settings --------
+  const loadModSettingsBtn  = document.getElementById("loadModSettingsBtn");
+  const saveModSettingsBtn  = document.getElementById("saveModSettingsBtn");
+  const modPermBan          = document.getElementById("modPermBan");
+  const modPermRefresh      = document.getElementById("modPermRefresh");
+  const modPermRevoke       = document.getElementById("modPermRevoke");
+  const modPermRedirect     = document.getElementById("modPermRedirect");
+  const modNewPin           = document.getElementById("modNewPin");
+  const modSettingsMsg      = document.getElementById("modSettingsMsg");
+
+  function setModMsg(text, kind) {
+    if (!modSettingsMsg) return;
+    modSettingsMsg.textContent = text;
+    modSettingsMsg.className = "msg" + (kind ? " " + kind : "");
+  }
+
+  async function loadModSettings() {
+    try {
+      const { res, json } = await getJson("/api/owner/mod-settings");
+      if (!res.ok) { setModMsg(json.error || "Failed", "err"); return; }
+      const p = json.permissions || {};
+      if (modPermBan)      modPermBan.checked      = p.ban      !== false;
+      if (modPermRefresh)  modPermRefresh.checked  = p.refresh  !== false;
+      if (modPermRevoke)   modPermRevoke.checked   = p.revoke   !== false;
+      if (modPermRedirect) modPermRedirect.checked = p.redirect !== false;
+      if (modNewPin) modNewPin.value = "";
+      setModMsg("Settings loaded.", "ok");
+    } catch { setModMsg("Network error.", "err"); }
+  }
+
+  async function saveModSettings() {
+    const permissions = {
+      ban:      modPermBan      ? modPermBan.checked      : true,
+      refresh:  modPermRefresh  ? modPermRefresh.checked  : true,
+      revoke:   modPermRevoke   ? modPermRevoke.checked   : true,
+      redirect: modPermRedirect ? modPermRedirect.checked : true,
+    };
+    const newPin = modNewPin ? modNewPin.value.trim() : "";
+    const body = { permissions };
+    if (newPin) body.newPin = newPin;
+    try {
+      const { res, json } = await postJson("/api/owner/mod-settings", body);
+      if (!res.ok) { setModMsg(json.error || "Failed", "err"); return; }
+      if (modNewPin) modNewPin.value = "";
+      setModMsg("Settings saved.", "ok");
+      toast("Mod settings saved.");
+    } catch { setModMsg("Network error.", "err"); }
+  }
+
+  if (loadModSettingsBtn) loadModSettingsBtn.addEventListener("click", () => { if (!unlocked) return showOverlay(); loadModSettings(); });
+  if (saveModSettingsBtn) saveModSettingsBtn.addEventListener("click", () => { if (!unlocked) return showOverlay(); saveModSettings(); });
+
   // -------- Start --------
   // Always require PIN on load (your spec)
   showOverlay();

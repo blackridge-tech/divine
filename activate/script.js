@@ -3,6 +3,7 @@
   const go = document.getElementById("go");
   const back = document.getElementById("back");
   const msg = document.getElementById("msg");
+  const form = document.querySelector(".field");
 
   function setMsg(text, kind){
     msg.textContent = text || "";
@@ -10,6 +11,16 @@
   }
 
   back.addEventListener("click", () => location.href = "/");
+
+  // Check for server-side blocks communicated via query param
+  const params = new URLSearchParams(location.search);
+  if (params.get("blocked") === "os") {
+    const os = params.get("os") || "your device";
+    if (form) form.style.display = "none";
+    if (go) go.style.display = "none";
+    setMsg("Access Blocked: Contact an administrator for help. (" + os + " devices are not permitted to activate.)", "err");
+    return; // stop here, don't attach submit handlers
+  }
 
   async function submit(){
     const pinAttempt = (pin.value || "").trim();
@@ -30,7 +41,7 @@
         setMsg((json && json.error) ? json.error : "Denied", "err");
         return;
       }
-      setMsg("Verified. Redirecting…", "ok");
+      setMsg("Verified. Redirecting\u2026", "ok");
       setTimeout(() => (location.href = "/divine/"), 250);
     } catch (e) {
       setMsg("Request failed", "err");

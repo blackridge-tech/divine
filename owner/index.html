@@ -53,6 +53,12 @@
           <button class="navItem" data-view="reports" type="button">
             <span class="navIcon">🚩</span><span>Reports</span>
           </button>
+          <button class="navItem" data-view="active-users" type="button">
+            <span class="navIcon">🟢</span><span>Active Users</span>
+          </button>
+          <button class="navItem" data-view="mod" type="button">
+            <span class="navIcon">🛡️</span><span>Mod Panel</span>
+          </button>
           <button class="navItem danger" data-view="lockdown" type="button">
             <span class="navIcon">🧨</span><span>Lockdown</span>
           </button>
@@ -359,6 +365,61 @@
           </div>
         </section>
 
+        <!-- ACTIVE USERS -->
+        <section class="view" id="view-active-users" aria-label="Active Users">
+          <div class="hgroup">
+            <h1>Active Users</h1>
+            <p class="muted">Users seen in the last 10 minutes.</p>
+          </div>
+          <div class="panel">
+            <div class="panelHead">
+              <button class="btn primary" id="loadOwnerActiveBtn" type="button">Load</button>
+            </div>
+            <div class="tableWrap">
+              <table class="table">
+                <thead><tr><th>User</th><th>Last Seen</th><th>IP</th><th style="text-align:right">Actions</th></tr></thead>
+                <tbody id="ownerActiveBody"><tr><td colspan="4" class="muted">Not loaded.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- MOD PANEL MANAGEMENT -->
+        <section class="view" id="view-mod" aria-label="Mod Panel">
+          <div class="hgroup">
+            <h1>Mod Panel</h1>
+            <p class="muted">Control what moderators can do. PIN resets to MOD_PIN env on server restart.</p>
+          </div>
+
+          <div class="panel" style="margin-bottom:14px">
+            <div class="panelHead"><h2>Permissions</h2></div>
+            <div class="form">
+              <div class="row">
+                <label class="radio"><input type="checkbox" id="modPermBan" /> <span>Ban</span></label>
+                <label class="radio"><input type="checkbox" id="modPermRefresh" /> <span>Refresh</span></label>
+                <label class="radio"><input type="checkbox" id="modPermRevoke" /> <span>Revoke</span></label>
+                <label class="radio"><input type="checkbox" id="modPermRedirect" /> <span>Redirect</span></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-bottom:14px">
+            <div class="panelHead"><h2>Change PIN</h2></div>
+            <div class="form">
+              <div class="formRow">
+                <label class="label">New MOD PIN</label>
+                <input id="modNewPin" class="input" type="password" placeholder="Leave blank to keep current" autocomplete="new-password" />
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <button class="btn primary" id="loadModSettingsBtn" type="button">Load Settings</button>
+            <button class="btn ghost" id="saveModSettingsBtn" type="button">Save Changes</button>
+          </div>
+          <div class="msg" id="modSettingsMsg" style="margin-top:10px"></div>
+        </section>
+
         <!-- LOCKDOWN -->
         <section class="view" id="view-lockdown" aria-label="Lockdown">
           <div class="hgroup">
@@ -366,7 +427,7 @@
             <p class="muted">When enabled: only /owner stays available, everything else goes to / (under construction).</p>
           </div>
 
-          <div class="panel dangerPanel">
+          <div class="panel dangerPanel" style="margin-bottom:14px">
             <div class="lockBox">
               <div class="lockState">
                 <div class="lockLight" id="lockLight"></div>
@@ -375,15 +436,43 @@
                   <div class="lockSub muted" id="lockSub">Requires API to persist state.</div>
                 </div>
               </div>
-
               <div class="lockActions">
                 <button class="btn danger" id="toggleLockdownBtn" type="button">Toggle Lockdown</button>
                 <button class="btn ghost" id="simulateLockdownUiBtn" type="button">Simulate UI</button>
               </div>
-
               <div class="mini muted">
                 During lockdown, the hidden /activate trigger should disappear on the Under Construction page.
               </div>
+            </div>
+          </div>
+
+          <div class="panel dangerPanel" style="margin-bottom:14px">
+            <div class="panelHead"><h2>Block Activation</h2></div>
+            <div class="lockBox">
+              <div class="lockState">
+                <div class="lockLight" id="blockActLight"></div>
+                <div>
+                  <div class="lockTitle" id="blockActTitle">Block Activation: Unknown</div>
+                  <div class="lockSub muted">When enabled, users who try to activate get a &ldquo;Activations are disabled&rdquo; error.</div>
+                </div>
+              </div>
+              <div class="lockActions">
+                <button class="btn danger" id="toggleBlockActBtn" type="button">Toggle</button>
+                <button class="btn ghost" id="loadBlockActBtn" type="button">Refresh</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panelHead">
+              <h2>Blocked Activation Log</h2>
+              <button class="btn ghost small" id="loadBlockedActLogBtn" type="button">Load</button>
+            </div>
+            <div class="tableWrap">
+              <table class="table">
+                <thead><tr><th>Time</th><th>OS</th><th>IP</th><th>Reason</th><th>User Agent</th></tr></thead>
+                <tbody id="blockedActLogBody"><tr><td colspan="5" class="muted">Not loaded.</td></tr></tbody>
+              </table>
             </div>
           </div>
         </section>

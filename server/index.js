@@ -28,15 +28,18 @@ function requireEnv(name) {
   return v;
 }
 
+const _dataDir = envStr("DATA_DIR", path.join(__dirname, "../data"));
 const CONFIG = {
   port: parseInt(envStr("PORT", "3000"), 10),
   nodeEnv: envStr("NODE_ENV", "production"),
   authPin: requireEnv("AUTH_PIN"),
   ownerPin: requireEnv("OWNER_PIN"),
+  modPin: envStr("MOD_PIN", ""),
   jwtSecret: requireEnv("JWT_SECRET"),
   accessExpiresDays: parseInt(envStr("ACCESS_EXPIRES_DAYS", "7"), 10) || 7,
-  dbPath: envStr("DB_PATH", "./data/divine.sqlite"),
-  exportDir: envStr("EXPORT_DIR", "./data/exports"),
+  dataDir: _dataDir,
+  dbPath: envStr("DB_PATH", path.join(_dataDir, "divine.sqlite")),
+  exportDir: envStr("EXPORT_DIR", path.join(_dataDir, "exports")),
   exportIncludeIp: envStr("EXPORT_INCLUDE_IP", "0") === "1",
   activationExpiresHours: parseInt(envStr("ACTIVATION_EXPIRES_HOURS", "12"), 10) || 12,
 
@@ -49,13 +52,19 @@ const CONFIG = {
   ownerPinMaxFails: 3,
   ownerPinLockSeconds: 24 * 60 * 60,
 
+  modPinMaxFails: 5,
+  modPinLockSeconds: 30 * 60,
+
   usernameCooldownDays: 14,
 };
 
 const COOKIE_USER = "divine_access";
 const COOKIE_OWNER_ONCE = "dv_owner_once";
 const COOKIE_ACTIVATION = "dv_activated";
+const COOKIE_MOD = "dv_mod";
 const ownerOnceTokens = new Map();
+const modSessions = new Map(); // token -> expiresAtMs
+let currentModPin = CONFIG.modPin; // resets to env on server restart
 
 // -----------------------
 // Helpers
@@ -82,15 +91,14 @@ function randomToken(bytes = 32) {
   return crypto.randomBytes(bytes).toString("base64url");
 }
 
-function createJWT(userId) {
+function createJWT(userId, tv = 0) {
   const expiresIn = `${CONFIG.accessExpiresDays}d`;
-  return jwt.sign({ userId: String(userId) }, CONFIG.jwtSecret, { expiresIn });
+  return jwt.sign({ userId: String(userId), tv: Number(tv) }, CONFIG.jwtSecret, { expiresIn });
 }
 
 function verifyJWT(token) {
   try {
-    const decoded = jwt.verify(token, CONFIG.jwtSecret);
-    return decoded.userId || null;
+    return jwt.verify(token, CONFIG.jwtSecret);
   } catch {
     return null;
   }
@@ -119,7 +127,9 @@ function clearUserCookie(res) {
 }
 
 async function issueUserSession(res, userId) {
-  const token = createJWT(userId);
+  const row = await dbGet(`SELECT token_version FROM users WHERE id=?`, [String(userId)]).catch(() => null);
+  const tv = Number(row?.token_version || 0);
+  const token = createJWT(userId, tv);
   setUserCookie(res, token);
 }
 
@@ -179,6 +189,47 @@ function consumeOwnerOnceCookie(req, res) {
     maxAge: 0,
   });
   return true;
+}
+
+// -----------------------
+// Mod session helpers
+// -----------------------
+function issueModCookie(res) {
+  const isProd = CONFIG.nodeEnv === "production";
+  const token = randomToken(24);
+  modSessions.set(token, nowMs() + (30 * 60 * 1000));
+  res.cookie(COOKIE_MOD, token, {
+    httpOnly: true,
+    sameSite: "Lax",
+    secure: isProd,
+    path: "/",
+    maxAge: 30 * 60 * 1000,
+  });
+}
+
+function verifyModCookie(req) {
+  const tok = (req.cookies || {})[COOKIE_MOD];
+  if (!tok) return false;
+  const exp = modSessions.get(String(tok));
+  if (!exp) return false;
+  if (nowMs() >= exp) { modSessions.delete(String(tok)); return false; }
+  return true;
+}
+
+function requireMod(req, res) {
+  if (!verifyModCookie(req)) {
+    res.status(401).json({ ok: false, error: "Mod PIN required." });
+    return false;
+  }
+  return true;
+}
+
+// Detect OS from user-agent for activation blocking
+function detectOS(ua) {
+  const s = String(ua || "").toLowerCase();
+  if (s.includes("windows")) return "Windows";
+  if (s.includes("macintosh") || s.includes("mac os") || s.includes("ipad") || s.includes("iphone")) return "Mac/iOS";
+  return null;
 }
 
 function normalizeUsername(u) {
@@ -487,6 +538,25 @@ CREATE TABLE IF NOT EXISTS activation_tokens (
     const init = CONFIG.lockdownEnabledEnv ? "1" : "0";
     await dbRun(`INSERT INTO owner_state(k,v) VALUES('lockdown_enabled',?)`, [init]);
   }
+
+  // Blocked activation attempts log
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS blocked_activation_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at INTEGER NOT NULL,
+  ip TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT 'os_block',
+  user_agent TEXT NOT NULL DEFAULT '',
+  os TEXT NOT NULL DEFAULT ''
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_blocked_act_created ON blocked_activation_log(created_at);`);
+
+  // Mod permissions (owner-controlled, stored in owner_state)
+  for (const perm of ["ban", "refresh", "revoke", "redirect"]) {
+    const k = `mod_perm_${perm}`;
+    const ex = await dbGet(`SELECT v FROM owner_state WHERE k=?`, [k]);
+    if (!ex) await dbRun(`INSERT INTO owner_state(k,v) VALUES(?,?)`, [k, "1"]);
+  }
 }
 
 async function isUserBanned(userRow) {
@@ -504,14 +574,14 @@ async function updateLastIp(userId, ip) {
 }
 
 async function verifyUserFromRequest(req) {
-  const tok = req.cookies[COOKIE_USER];
+  const tok = (req.cookies || {})[COOKIE_USER];
   if (!tok) return null;
-  
-  const userId = verifyJWT(tok);
-  if (!userId) return null;
-
-  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [String(userId)]);
+  const decoded = verifyJWT(tok);
+  if (!decoded || !decoded.userId) return null;
+  const user = await dbGet(`SELECT * FROM users WHERE id=?`, [String(decoded.userId)]);
   if (!user) return null;
+  // Token version check — if tv is embedded, must match DB (supports instant revoke)
+  if (decoded.tv !== undefined && Number(decoded.tv) !== Number(user.token_version || 0)) return null;
   return user;
 }
 
@@ -718,6 +788,37 @@ function requireOwner(req, res) {
 }
 
 // -----------------------
+// Auto-save snapshots every 6 hours
+// -----------------------
+async function runAutoSave() {
+  try {
+    const dir = path.join(CONFIG.dataDir, "snapshots");
+    fs.mkdirSync(dir, { recursive: true });
+    const now = nowMs();
+
+    const users = await dbAll(`SELECT id, username, bio, created_at, last_seen_at, last_ip, banned_until, ban_reason, username_changed_at, activated_at FROM users ORDER BY created_at DESC`);
+    fs.writeFileSync(path.join(dir, "users.json"), JSON.stringify({ savedAt: now, count: users.length, users }, null, 2));
+
+    const threads = await dbAll(`SELECT * FROM dm_threads ORDER BY last_message_at DESC`);
+    const messages = await dbAll(`SELECT * FROM dm_messages ORDER BY created_at DESC LIMIT 100000`);
+    fs.writeFileSync(path.join(dir, "dms.json"), JSON.stringify({ savedAt: now, threadCount: threads.length, messageCount: messages.length, threads, messages }, null, 2));
+
+    const activity = await dbAll(`SELECT * FROM activity ORDER BY created_at DESC LIMIT 20000`);
+    fs.writeFileSync(path.join(dir, "activity.json"), JSON.stringify({ savedAt: now, count: activity.length, activity }, null, 2));
+
+    const clients = await dbAll(`SELECT * FROM clients ORDER BY last_seen_at DESC`);
+    fs.writeFileSync(path.join(dir, "clients.json"), JSON.stringify({ savedAt: now, count: clients.length, clients }, null, 2));
+
+    const blocked = await dbAll(`SELECT * FROM blocked_activation_log ORDER BY created_at DESC LIMIT 10000`);
+    fs.writeFileSync(path.join(dir, "blocked_activations.json"), JSON.stringify({ savedAt: now, count: blocked.length, blocked }, null, 2));
+
+    console.log(`[AutoSave] Snapshot saved at ${new Date(now).toISOString()}`);
+  } catch (e) {
+    console.error("[AutoSave] Error:", e);
+  }
+}
+
+// -----------------------
 // WebSocket infrastructure
 // -----------------------
 const wsClients = new Map(); // userId -> Set of WebSocket connections
@@ -819,8 +920,22 @@ app.get("/activate", async (req, res) => {
       if (user) return res.redirect(302, "/divine/");
     }
     const enabled = await getLockdownEnabled();
-    if (enabled) {
-      return res.redirect(302, "/");
+    if (enabled) return res.redirect(302, "/");
+
+    // OS block: Windows and Mac/iOS users are not allowed to activate.
+    // Skip if already showing the blocked error (avoid redirect loop).
+    if (!req.query.blocked) {
+      const ua = req.headers["user-agent"] || "";
+      const os = detectOS(ua);
+      if (os) {
+        try {
+          await dbRun(
+            `INSERT INTO blocked_activation_log(created_at,ip,reason,user_agent,os) VALUES(?,?,?,?,?)`,
+            [nowMs(), clampStr(getReqIp(req), 80), "os_block", clampStr(ua, 300), os]
+          );
+        } catch {}
+        return res.redirect(302, "/activate?blocked=os&os=" + encodeURIComponent(os));
+      }
     }
   } catch {}
   return sendRepoFile(res, "activate/index.html");
@@ -833,8 +948,13 @@ app.get("/activate/register", async (req, res) => {
       if (user) return res.redirect(302, "/divine/");
     }
     const enabled = await getLockdownEnabled();
-    if (enabled) {
-      return res.redirect(302, "/");
+    if (enabled) return res.redirect(302, "/");
+
+    // OS block on register page too
+    if (!req.query.blocked) {
+      const ua = req.headers["user-agent"] || "";
+      const os = detectOS(ua);
+      if (os) return res.redirect(302, "/activate?blocked=os&os=" + encodeURIComponent(os));
     }
   } catch {}
   return sendRepoFile(res, "activate/register/index.html");
@@ -843,19 +963,49 @@ app.get("/activate/register", async (req, res) => {
 // Owner page (same file; UI does pin overlay)
 app.get("/owner", (req, res) => sendRepoFile(res, "owner/index.html"));
 
+// Mod panel page
+app.get("/mod", (req, res) => sendRepoFile(res, "mod/index.html"));
+
+// Mod PIN endpoint
+const modPinLocks = new Map();
+app.post("/mod/pin", (req, res) => {
+  const ip = getReqIp(req);
+  if (isLocked(modPinLocks, ip)) {
+    const rem = remainingSeconds(modPinLocks, ip);
+    return res.status(429).json({ ok: false, error: `Too many attempts. Try again in ${rem}s.` });
+  }
+  const pinAttempt = String(req.body?.pinAttempt || "").trim();
+  if (!pinAttempt) return res.status(400).json({ ok: false, error: "Missing PIN" });
+  if (!currentModPin) return res.status(403).json({ ok: false, error: "Mod panel not configured." });
+  if (pinAttempt !== currentModPin) {
+    const v = registerFail(modPinLocks, ip, CONFIG.modPinMaxFails, CONFIG.modPinLockSeconds);
+    if (v.fails >= CONFIG.modPinMaxFails)
+      return res.status(429).json({ ok: false, error: `Wrong PIN. Locked for ${CONFIG.modPinLockSeconds / 60}min.` });
+    return res.status(403).json({ ok: false, error: "Wrong PIN" });
+  }
+  registerSuccess(modPinLocks, ip);
+  issueModCookie(res);
+  return res.json({ ok: true });
+});
+
 // -----------------------
 // Global gate behavior (lockdown + redirect logged-in users away from gate)
 // -----------------------
+// Static asset extensions that must always be served, even during lockdown.
+const STATIC_EXT = /\.(css|js|png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|otf|eot|map|json)$/i;
+
 app.use(async (req, res, next) => {
   try {
     const p = req.path || "/";
 
-    // owner paths handled separately (allowed even during lockdown)
+    // owner and mod paths are always allowed, even during lockdown
     if (p === "/owner" || p.startsWith("/owner/")) return next();
+    if (p === "/mod" || p.startsWith("/mod/")) return next();
 
-    // Allow root and activate pages always.
+    // Always let static assets through so CSS/JS/images load on every page
+    if (STATIC_EXT.test(p)) return next();
+
     // Lockdown behavior: only / and /owner/* should be accessible.
-    // You also wanted Under Construction to remain accessible (it is /).
     const lockdownEnabled = await getLockdownEnabled();
     if (lockdownEnabled) {
       // Allow only:
@@ -885,6 +1035,14 @@ app.use(async (req, res, next) => {
 // User PIN gate with lockout
 app.post("/api/activate", async (req, res) => {
   const ip = getReqIp(req);
+
+  // Soft lockdown: block_activation prevents new activations
+  try {
+    const blockState = await dbGet(`SELECT v FROM owner_state WHERE k='block_activation'`);
+    if (blockState && blockState.v === "1") {
+      return res.status(403).json({ ok: false, error: "Activations are currently blocked by an administrator. Try again later." });
+    }
+  } catch {}
 
   if (isLocked(pinLocks.user, ip)) {
     const rem = remainingSeconds(pinLocks.user, ip);
@@ -2194,6 +2352,196 @@ app.get("/api/dm/ban-info", async (req, res) => {
 });
 
 // -----------------------
+// Mod Panel APIs (/api/mod/*)
+// -----------------------
+
+// Helper to get a mod permission value
+async function getModPerm(name) {
+  const row = await dbGet(`SELECT v FROM owner_state WHERE k=?`, [`mod_perm_${name}`]);
+  return !row || row.v === "1";
+}
+
+app.get("/api/mod/state", (req, res) => {
+  if (!requireMod(req, res)) return;
+  return res.json({ ok: true, modPin: !!currentModPin });
+});
+
+app.get("/api/mod/active-users", async (req, res) => {
+  if (!requireMod(req, res)) return;
+  try {
+    const tenMinutesAgo = nowMs() - (10 * 60 * 1000);
+    const users = await dbAll(
+      `SELECT id, username, last_seen_at, last_ip FROM users WHERE last_seen_at > ? ORDER BY last_seen_at DESC`,
+      [tenMinutesAgo]
+    );
+    return res.json({ ok: true, users: users.map(u => ({
+      id: u.id, username: u.username,
+      lastSeenAt: Number(u.last_seen_at), lastIp: u.last_ip || ""
+    })) });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.get("/api/mod/users", async (req, res) => {
+  if (!requireMod(req, res)) return;
+  try {
+    const rows = await dbAll(
+      `SELECT id, username, last_ip, banned_until, created_at, last_seen_at FROM users ORDER BY last_seen_at DESC LIMIT 500`
+    );
+    return res.json({ ok: true, users: rows.map(u => ({
+      id: u.id, username: u.username, lastIp: u.last_ip || "",
+      bannedUntil: Number(u.banned_until || 0), createdAt: Number(u.created_at),
+      lastSeenAt: Number(u.last_seen_at || 0)
+    })) });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.post("/api/mod/ban", async (req, res) => {
+  if (!requireMod(req, res)) return;
+  if (!await getModPerm("ban")) return res.status(403).json({ ok: false, error: "Ban action disabled by owner." });
+  try {
+    const username = normalizeUsername(req.body?.username);
+    const duration = String(req.body?.duration || "").trim();
+    const reason = clampStr(String(req.body?.reason || ""), 300);
+    if (!username || !duration) return res.status(400).json({ ok: false, error: "Missing fields" });
+    const u = await dbGet(`SELECT id FROM users WHERE username=?`, [username]);
+    if (!u) return res.status(404).json({ ok: false, error: "User not found" });
+    let bannedUntil;
+    if (duration === "permanent") { bannedUntil = nowMs() + (365 * 24 * 60 * 60 * 1000 * 100); }
+    else {
+      const m = duration.match(/^(\d+)(h|d|m)$/i);
+      if (!m) return res.status(400).json({ ok: false, error: "Invalid duration (use 1h, 3d, permanent)" });
+      const n = parseInt(m[1], 10);
+      const unit = m[2].toLowerCase();
+      const ms = unit === "h" ? n * 3600000 : unit === "d" ? n * 86400000 : n * 60000;
+      bannedUntil = nowMs() + ms;
+    }
+    await dbRun(`UPDATE users SET banned_until=?, ban_reason=? WHERE id=?`, [bannedUntil, reason, u.id]);
+    return res.json({ ok: true });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.post("/api/mod/refresh", async (req, res) => {
+  if (!requireMod(req, res)) return;
+  if (!await getModPerm("refresh")) return res.status(403).json({ ok: false, error: "Refresh action disabled by owner." });
+  try {
+    const username = normalizeUsername(req.body?.username);
+    if (!username) return res.status(400).json({ ok: false, error: "Missing username" });
+    const u = await dbGet(`SELECT id FROM users WHERE username=?`, [username]);
+    if (!u) return res.status(404).json({ ok: false, error: "User not found" });
+    notifyUser(u.id, { type: "refresh" });
+    return res.json({ ok: true });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.post("/api/mod/revoke", async (req, res) => {
+  if (!requireMod(req, res)) return;
+  if (!await getModPerm("revoke")) return res.status(403).json({ ok: false, error: "Revoke action disabled by owner." });
+  try {
+    const username = normalizeUsername(req.body?.username);
+    if (!username) return res.status(400).json({ ok: false, error: "Missing username" });
+    const u = await dbGet(`SELECT id FROM users WHERE username=?`, [username]);
+    if (!u) return res.status(404).json({ ok: false, error: "User not found" });
+    // Increment token_version — invalidates all existing JWTs with embedded tv
+    await dbRun(`UPDATE users SET token_version = token_version + 1 WHERE id=?`, [u.id]);
+    return res.json({ ok: true });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.post("/api/mod/redirect", async (req, res) => {
+  if (!requireMod(req, res)) return;
+  if (!await getModPerm("redirect")) return res.status(403).json({ ok: false, error: "Redirect action disabled by owner." });
+  try {
+    const username = normalizeUsername(req.body?.username);
+    const url = String(req.body?.url || "").trim();
+    if (!username || !url) return res.status(400).json({ ok: false, error: "Missing fields" });
+    // Only allow site-relative paths
+    if (!url.startsWith("/") || url.startsWith("//")) {
+      return res.status(400).json({ ok: false, error: "Only site-relative paths allowed (must start with /)" });
+    }
+    const u = await dbGet(`SELECT id FROM users WHERE username=?`, [username]);
+    if (!u) return res.status(404).json({ ok: false, error: "User not found" });
+    await dbRun(
+      `INSERT INTO user_redirects(user_id, url, created_at) VALUES(?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET url=excluded.url, created_at=excluded.created_at`,
+      [u.id, clampStr(url, 900), nowMs()]
+    );
+    return res.json({ ok: true });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+// -----------------------
+// New Owner APIs
+// -----------------------
+
+app.get("/api/owner/active-users", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+    const tenMinutesAgo = nowMs() - (10 * 60 * 1000);
+    const users = await dbAll(
+      `SELECT id, username, last_seen_at, last_ip FROM users WHERE last_seen_at > ? ORDER BY last_seen_at DESC`,
+      [tenMinutesAgo]
+    );
+    return res.json({ ok: true, users: users.map(u => ({
+      id: u.id, username: u.username,
+      lastSeenAt: Number(u.last_seen_at), lastIp: u.last_ip || ""
+    })) });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.get("/api/owner/blocked-activations", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+    const rows = await dbAll(`SELECT * FROM blocked_activation_log ORDER BY created_at DESC LIMIT 500`);
+    return res.json({ ok: true, items: rows.map(r => ({
+      id: r.id, createdAt: Number(r.created_at), ip: r.ip, reason: r.reason, os: r.os,
+      userAgent: r.user_agent
+    })) });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.post("/api/owner/block-activation", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+    const cur = await dbGet(`SELECT v FROM owner_state WHERE k='block_activation'`);
+    const next = (!cur || cur.v !== "1") ? "1" : "0";
+    await dbRun(`INSERT INTO owner_state(k,v) VALUES('block_activation',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`, [next]);
+    return res.json({ ok: true, blocked: next === "1" });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.get("/api/owner/mod-settings", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+    const perms = {};
+    for (const name of ["ban", "refresh", "revoke", "redirect"]) {
+      const row = await dbGet(`SELECT v FROM owner_state WHERE k=?`, [`mod_perm_${name}`]);
+      perms[name] = !row || row.v === "1";
+    }
+    const blockAct = await dbGet(`SELECT v FROM owner_state WHERE k='block_activation'`);
+    return res.json({ ok: true, perms, blockActivation: blockAct?.v === "1", modPinIsSet: !!currentModPin });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+app.post("/api/owner/mod-settings", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+    const { perms, pin } = req.body || {};
+    if (perms && typeof perms === "object") {
+      for (const name of ["ban", "refresh", "revoke", "redirect"]) {
+        if (perms[name] !== undefined) {
+          const v = perms[name] ? "1" : "0";
+          await dbRun(`INSERT INTO owner_state(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`, [`mod_perm_${name}`, v]);
+        }
+      }
+    }
+    if (pin && typeof pin === "string" && pin.trim().length >= 4) {
+      currentModPin = pin.trim();
+    }
+    return res.json({ ok: true });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
+// -----------------------
 // Auth protect /divine/* (including /divine/profile/*) + activity logging + redirect-on-next-load
 // -----------------------
 app.use("/divine", async (req, res, next) => {
@@ -2395,6 +2743,8 @@ wss.on("connection", async (ws, req) => {
 initDb()
   .then(async () => {
     try { await writeSafeExports(); } catch {}
+    try { await runAutoSave(); } catch {}
+    setInterval(runAutoSave, 6 * 60 * 60 * 1000);
     server.listen(CONFIG.port, () => {
       console.log(`Divine server listening on :${CONFIG.port}`);
       console.log(`WebSocket server ready at ws://localhost:${CONFIG.port}/ws`);
