@@ -2547,6 +2547,10 @@ app.post("/api/owner/mod-settings", async (req, res) => {
 app.use("/divine", async (req, res, next) => {
   try {
     const p = req.path || "/";
+
+    // Always let static assets through so CSS/JS/images load on every page
+    if (STATIC_EXT.test(p)) return next();
+
     const isDivineHome = p === "/";
     const user = await verifyUserFromRequest(req);
 
