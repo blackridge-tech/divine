@@ -3,22 +3,236 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Under Construction</title>
+  <title>Divine — All in one coding tool</title>
   <link rel="stylesheet" href="/styles.css" />
+  <style>
+    body { overflow: hidden; }
+
+    /* Shell */
+    .tool-shell {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Header */
+    .tool-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.32);
+      backdrop-filter: blur(14px);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .tool-logo {
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: .02em;
+      background: linear-gradient(90deg, var(--gold), var(--purple), var(--ice));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .tool-tagline {
+      color: rgba(246,241,255,0.32);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    /* Body */
+    .tool-body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Editor side */
+    .editor-side {
+      display: flex;
+      flex-direction: column;
+      width: 50%;
+      min-width: 0;
+      flex-shrink: 0;
+    }
+    .tab-bar {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      padding: 6px 10px 0;
+      background: rgba(0,0,0,0.22);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
+    }
+    .tab-btn {
+      padding: 6px 18px;
+      border-radius: 8px 8px 0 0;
+      border: 1px solid transparent;
+      border-bottom: none;
+      background: transparent;
+      color: rgba(246,241,255,0.42);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: color .12s, background .12s;
+      line-height: 1.4;
+    }
+    .tab-btn.active {
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.1);
+      color: var(--text);
+    }
+    .tab-btn:hover:not(.active) { color: rgba(246,241,255,0.75); }
+    .run-btn {
+      margin-left: auto;
+      margin-bottom: 2px;
+      padding: 5px 15px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,215,0,0.3);
+      background: rgba(255,215,0,0.08);
+      color: var(--gold);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background .12s, border-color .12s;
+    }
+    .run-btn:hover {
+      background: rgba(255,215,0,0.18);
+      border-color: rgba(255,215,0,0.55);
+    }
+    .editor-pane {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+    .code-area {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      resize: none;
+      border: none;
+      outline: none;
+      background: rgba(0,0,0,0.38);
+      color: var(--text);
+      font-family: "JetBrains Mono", "Fira Code", "SF Mono", ui-monospace, Consolas, "Courier New", monospace;
+      font-size: 14px;
+      line-height: 1.7;
+      padding: 14px 16px;
+      tab-size: 2;
+      white-space: pre;
+      overflow: auto;
+      caret-color: var(--gold);
+    }
+    .code-area.hidden { display: none; }
+
+    /* Drag divider */
+    .drag-divider {
+      width: 5px;
+      background: rgba(255,255,255,0.05);
+      cursor: col-resize;
+      flex-shrink: 0;
+      transition: background .15s;
+      z-index: 5;
+    }
+    .drag-divider:hover,
+    .drag-divider.dragging { background: rgba(163,75,255,0.4); }
+
+    /* Preview side */
+    .preview-side {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+    }
+    .preview-bar {
+      padding: 7px 14px;
+      background: rgba(0,0,0,0.22);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(246,241,255,0.3);
+      flex-shrink: 0;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+    #preview-frame {
+      flex: 1;
+      width: 100%;
+      border: none;
+      background: #fff;
+    }
+
+    /* Mobile */
+    @media (max-width: 680px) {
+      .tool-body { flex-direction: column; }
+      .editor-side { width: 100% !important; height: 50%; }
+      .preview-side { height: 50%; }
+      .drag-divider { display: none; }
+    }
+  </style>
 </head>
 <body>
   <div class="bg" aria-hidden="true"></div>
   <div class="noise" aria-hidden="true"></div>
   <div class="sparkles" aria-hidden="true"></div>
-  <main class="wrap" role="main" aria-labelledby="t">
-    <section class="card">
-      <div class="badge">Status</div>
-      <h1 id="t">Under Construction</h1>
-      <p class="lead">We’re rebuilding the experience. Check back soon.</p>
-    </section>
-  </main>
-  <!--trigger stays hidden shh-->
-  <a class="hidden-trigger" href="/activate" aria-label="hidden"></a>
+
+  <div class="tool-shell">
+    <header class="tool-header">
+      <span class="tool-logo">Divine</span>
+      <span class="tool-tagline">— All in one coding tool</span>
+    </header>
+
+    <div class="tool-body">
+      <!-- Editor -->
+      <div class="editor-side" id="editor-side">
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="html">HTML</button>
+          <button class="tab-btn" data-tab="css">CSS</button>
+          <button class="tab-btn" data-tab="js">JS</button>
+          <button class="run-btn" id="run-btn">▶ Run</button>
+        </div>
+        <div class="editor-pane">
+          <textarea class="code-area" id="code-html" data-tab="html"
+            spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+          >&lt;!-- HTML goes here --&gt;
+&lt;h1&gt;Hello, Divine!&lt;/h1&gt;
+&lt;p&gt;Start coding. Type &lt;strong&gt;!activate&lt;/strong&gt; to activate your account.&lt;/p&gt;</textarea>
+          <textarea class="code-area hidden" id="code-css" data-tab="css"
+            spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+          >/* CSS goes here */
+body {
+  font-family: sans-serif;
+  padding: 24px;
+  background: #0d0d1a;
+  color: #f0eaff;
+}
+h1 {
+  color: #ffd700;
+}</textarea>
+          <textarea class="code-area hidden" id="code-js" data-tab="js"
+            spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+          >// JavaScript goes here
+console.log('Hello from Divine!');</textarea>
+        </div>
+      </div>
+
+      <div class="drag-divider" id="drag-divider" aria-hidden="true"></div>
+
+      <!-- Preview -->
+      <div class="preview-side" id="preview-side">
+        <div class="preview-bar">Preview</div>
+        <iframe id="preview-frame" sandbox="allow-scripts allow-modals allow-forms" title="Preview"></iframe>
+      </div>
+    </div>
+  </div>
+
   <script src="/script.js"></script>
 </body>
 </html>

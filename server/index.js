@@ -469,6 +469,18 @@ CREATE TABLE IF NOT EXISTS clients (
 );`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_clients_status ON clients(status);`);
 
+  // Activation tokens (one-time, short-lived, proves user passed PIN before registering)
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS activation_tokens (
+  token TEXT PRIMARY KEY,
+  issued_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  last_ip TEXT NOT NULL DEFAULT '',
+  consumed_at INTEGER NOT NULL DEFAULT 0,
+  consumed_by_user_id TEXT NOT NULL DEFAULT ''
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_activation_tokens_expires ON activation_tokens(expires_at);`);
+
   // Ensure a default lockdown value exists (env is fallback only)
   const existing = await dbGet(`SELECT v FROM owner_state WHERE k='lockdown_enabled'`);
   if (!existing) {
@@ -616,6 +628,96 @@ async function writeSafeExports() {
 }
 
 // -----------------------
+// Missing helper functions
+// -----------------------
+
+// Lockdown state
+async function getLockdownEnabled() {
+  try {
+    const row = await dbGet(`SELECT v FROM owner_state WHERE k='lockdown_enabled'`);
+    return row ? row.v === "1" : false;
+  } catch {
+    return false;
+  }
+}
+
+async function setLockdownEnabled(enabled) {
+  await dbRun(
+    `INSERT OR REPLACE INTO owner_state(k,v) VALUES('lockdown_enabled',?)`,
+    [enabled ? "1" : "0"]
+  );
+}
+
+// Activation cookie helpers
+function activationCookieMaxAgeMs() {
+  return CONFIG.activationExpiresHours * 60 * 60 * 1000;
+}
+
+function setActivationCookie(res, token) {
+  const isProd = CONFIG.nodeEnv === "production";
+  res.cookie(COOKIE_ACTIVATION, token, {
+    httpOnly: true,
+    sameSite: "Lax",
+    secure: isProd,
+    path: "/",
+    maxAge: activationCookieMaxAgeMs(),
+  });
+}
+
+function clearActivationCookie(res) {
+  const isProd = CONFIG.nodeEnv === "production";
+  res.cookie(COOKIE_ACTIVATION, "", {
+    httpOnly: true,
+    sameSite: "Lax",
+    secure: isProd,
+    path: "/",
+    maxAge: 0,
+  });
+}
+
+// One-time redirect-on-next-load
+async function getAndConsumeRedirect(userId) {
+  const row = await dbGet(`SELECT url FROM user_redirects WHERE user_id=?`, [String(userId)]);
+  if (!row) return null;
+  await dbRun(`DELETE FROM user_redirects WHERE user_id=?`, [String(userId)]);
+  return row.url;
+}
+
+// Activity logging
+async function logActivity(user, actPath, ip) {
+  try {
+    await dbRun(
+      `INSERT INTO activity(created_at, user_id, username, path, ip) VALUES(?,?,?,?,?)`,
+      [nowMs(), String(user.id), String(user.username), clampStr(actPath, 500), clampStr(ip, 80)]
+    );
+  } catch {}
+}
+
+// Auth guards
+async function requireUser(req, res) {
+  const user = await verifyUserFromRequest(req);
+  if (!user) {
+    res.status(401).json({ ok: false, error: "Not authenticated" });
+    return null;
+  }
+  if (await isUserBanned(user)) {
+    clearUserCookie(res);
+    res.status(403).json({ ok: false, error: "Account banned" });
+    return null;
+  }
+  return user;
+}
+
+function requireOwner(req, res) {
+  const tok = req.cookies[COOKIE_OWNER_ONCE];
+  if (!isValidOwnerOnceToken(tok)) {
+    res.status(401).json({ ok: false, error: "Owner authentication required" });
+    return false;
+  }
+  return true;
+}
+
+// -----------------------
 // WebSocket infrastructure
 // -----------------------
 const wsClients = new Map(); // userId -> Set of WebSocket connections
@@ -708,9 +810,14 @@ app.get("/index.html", async (req, res) => {
   return sendRepoFile(res, "index.html");
 });
 
-// Activation pages (blocked during lockdown)
+// Activation pages (blocked during lockdown; redirect to /divine/ if already logged in)
 app.get("/activate", async (req, res) => {
   try {
+    // Already have access? Skip activation.
+    if (req.cookies[COOKIE_USER]) {
+      const user = await verifyUserFromRequest(req);
+      if (user) return res.redirect(302, "/divine/");
+    }
     const enabled = await getLockdownEnabled();
     if (enabled) {
       return res.redirect(302, "/");
@@ -720,6 +827,11 @@ app.get("/activate", async (req, res) => {
 });
 app.get("/activate/register", async (req, res) => {
   try {
+    // Already have access? Skip activation.
+    if (req.cookies[COOKIE_USER]) {
+      const user = await verifyUserFromRequest(req);
+      if (user) return res.redirect(302, "/divine/");
+    }
     const enabled = await getLockdownEnabled();
     if (enabled) {
       return res.redirect(302, "/");
@@ -2094,7 +2206,7 @@ app.use("/divine", async (req, res, next) => {
       // must be "activated" to see /divine/
       if (isDivineHome) {
         const act = await verifyActivationFromRequest(req);
-        if (!act) return res.redirect(302, "/activate");
+        if (!act) return res.redirect(302, "/404");
         req.user = null;
         return next();
       }
