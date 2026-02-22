@@ -116,6 +116,7 @@ a{ text-decoration:none; color:inherit; }
   background: rgba(5, 5, 10, 0.84);
   backdrop-filter: blur(8px);
 }
+.auth-gate[hidden] { display: none; }
 
 .auth-gate-card{
   width: min(660px, 100%);

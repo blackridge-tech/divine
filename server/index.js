@@ -723,6 +723,13 @@ function activationCookieMaxAgeMs() {
   return CONFIG.activationExpiresHours * 60 * 60 * 1000;
 }
 
+function msUntilUsernameChangeAllowed(user) {
+  const changedAt = Number(user.username_changed_at || 0);
+  if (!changedAt) return 0;
+  const cooldownMs = CONFIG.usernameCooldownDays * 24 * 60 * 60 * 1000;
+  return Math.max(0, changedAt + cooldownMs - nowMs());
+}
+
 function setActivationCookie(res, token) {
   const isProd = CONFIG.nodeEnv === "production";
   res.cookie(COOKIE_ACTIVATION, token, {
@@ -776,6 +783,17 @@ async function requireUser(req, res) {
     return null;
   }
   return user;
+}
+
+async function getDmBan(userId) {
+  return await dbGet(
+    `SELECT * FROM dm_bans WHERE user_id=? AND banned_until > ?`,
+    [String(userId), nowMs()]
+  ) || null;
+}
+
+async function isUserDmBanned(userId) {
+  return !!(await getDmBan(userId));
 }
 
 function requireOwner(req, res) {
@@ -940,25 +958,7 @@ app.get("/activate", async (req, res) => {
   } catch {}
   return sendRepoFile(res, "activate/index.html");
 });
-app.get("/activate/register", async (req, res) => {
-  try {
-    // Already have access? Skip activation.
-    if (req.cookies[COOKIE_USER]) {
-      const user = await verifyUserFromRequest(req);
-      if (user) return res.redirect(302, "/divine/");
-    }
-    const enabled = await getLockdownEnabled();
-    if (enabled) return res.redirect(302, "/");
-
-    // OS block on register page too
-    if (!req.query.blocked) {
-      const ua = req.headers["user-agent"] || "";
-      const os = detectOS(ua);
-      if (os) return res.redirect(302, "/activate?blocked=os&os=" + encodeURIComponent(os));
-    }
-  } catch {}
-  return sendRepoFile(res, "activate/register/index.html");
-});
+app.get("/activate/register", (req, res) => res.redirect(302, "/activate"));
 
 // Owner page (same file; UI does pin overlay)
 app.get("/owner", (req, res) => sendRepoFile(res, "owner/index.html"));
