@@ -176,12 +176,3 @@ h1{
   z-index:2;
 }
 
-.hidden-trigger{
-  position: fixed;
-  left: 0;
-  bottom: 0;
-  width: 28px;
-  height: 28px;
-  opacity: 0.001;
-  z-index: 10;
-}

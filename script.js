@@ -1,23 +1,21 @@
 (function () {
-  // Elements
-  const tabBtns    = document.querySelectorAll('.tab-btn');
-  const editors    = document.querySelectorAll('.code-area');
-  const runBtn     = document.getElementById('run-btn');
-  const frame      = document.getElementById('preview-frame');
-  const editorSide = document.getElementById('editor-side');
-  const previewSide= document.getElementById('preview-side');
-  const dragDiv    = document.getElementById('drag-divider');
+  const tabBtns       = document.querySelectorAll('.tab-btn');
+  const editors       = document.querySelectorAll('.code-area');
+  const runBtn        = document.getElementById('run-btn');
+  const frame         = document.getElementById('preview-frame');
+  const editorSection = document.getElementById('editor-section');
+  const previewSection= document.getElementById('preview-section');
+  const dragDiv       = document.getElementById('drag-divider');
 
   // Tab switching
-  function switchTab(name) {
-    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-    editors.forEach(e => e.classList.toggle('hidden', e.dataset.tab !== name));
-  }
   tabBtns.forEach(b => {
-    if (b.id !== 'run-btn') b.addEventListener('click', () => switchTab(b.dataset.tab));
+    if (b.dataset.tab) b.addEventListener('click', () => {
+      tabBtns.forEach(x => x.classList.toggle('active', x.dataset.tab === b.dataset.tab));
+      editors.forEach(e => e.classList.toggle('hidden', e.dataset.tab !== b.dataset.tab));
+    });
   });
 
-  // Build & run preview
+  // Build & run
   function buildDoc() {
     const html = document.getElementById('code-html').value;
     const css  = document.getElementById('code-css').value;
@@ -35,51 +33,49 @@
   }
 
   runBtn.addEventListener('click', runPreview);
-  // Auto-run on load
   runPreview();
 
-  // !activate trigger
+  // Secret: typing !activate in any editor redirects to /activate
   editors.forEach(ed => {
     ed.addEventListener('input', function () {
-      if (this.value.includes('!activate')) {
-        location.href = '/activate';
-      }
+      if (this.value.includes('!activate')) location.href = '/activate';
     });
   });
 
-  // Tab key -> 2-space indent
+  // Tab key → 2-space indent
   editors.forEach(ed => {
     ed.addEventListener('keydown', function (e) {
       if (e.key !== 'Tab') return;
       e.preventDefault();
-      const s   = this.selectionStart;
-      const end = this.selectionEnd;
-      this.value = this.value.slice(0, s) + '  ' + this.value.slice(end);
+      const s = this.selectionStart;
+      this.value = this.value.slice(0, s) + '  ' + this.value.slice(this.selectionEnd);
       this.selectionStart = this.selectionEnd = s + 2;
     });
   });
 
-  // Drag-to-resize divider
+  // Vertical drag-to-resize
   let dragging = false;
-  if (dragDiv) {
-    dragDiv.addEventListener('mousedown', e => {
-      dragging = true;
-      dragDiv.classList.add('dragging');
-      e.preventDefault();
-    });
-    document.addEventListener('mousemove', e => {
-      if (!dragging) return;
-      const container = dragDiv.parentElement;
-      const rect = container.getBoundingClientRect();
-      const pct  = Math.max(20, Math.min(80, ((e.clientX - rect.left) / rect.width) * 100));
-      editorSide.style.width  = pct + '%';
-      previewSide.style.flex  = 'none';
-      previewSide.style.width = (100 - pct - 0.3) + '%';
-    });
-    document.addEventListener('mouseup', () => {
-      if (!dragging) return;
-      dragging = false;
-      dragDiv.classList.remove('dragging');
-    });
-  }
+  dragDiv.addEventListener('mousedown', e => {
+    dragging = true;
+    dragDiv.classList.add('dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const shell = dragDiv.parentElement;
+    const rect  = shell.getBoundingClientRect();
+    // Reserve header height
+    const headerH = shell.querySelector('.tool-header')?.offsetHeight || 42;
+    const usable  = rect.height - headerH - dragDiv.offsetHeight;
+    const offsetY = e.clientY - rect.top - headerH;
+    const pct = Math.max(20, Math.min(80, (offsetY / usable) * 100));
+    editorSection.style.height = pct + '%';
+    previewSection.style.flex  = 'none';
+    previewSection.style.height = (100 - pct) + '%';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    dragDiv.classList.remove('dragging');
+  });
 })();

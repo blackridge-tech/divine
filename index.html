@@ -6,9 +6,6 @@
   <title>Divine — All in one coding tool</title>
   <link rel="stylesheet" href="/styles.css" />
   <style>
-    body { overflow: hidden; }
-
-    /* Shell */
     .tool-shell {
       position: relative;
       z-index: 5;
@@ -16,8 +13,6 @@
       flex-direction: column;
       height: 100vh;
     }
-
-    /* Header */
     .tool-header {
       display: flex;
       align-items: center;
@@ -43,20 +38,12 @@
       font-weight: 700;
       font-size: 13px;
     }
-
-    /* Body */
-    .tool-body {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-    }
-
-    /* Editor side */
-    .editor-side {
+    /* Editor section (top) */
+    .editor-section {
       display: flex;
       flex-direction: column;
-      width: 50%;
-      min-width: 0;
+      height: 55%;
+      min-height: 0;
       flex-shrink: 0;
     }
     .tab-bar {
@@ -131,25 +118,23 @@
       caret-color: var(--gold);
     }
     .code-area.hidden { display: none; }
-
-    /* Drag divider */
+    /* Horizontal drag divider */
     .drag-divider {
-      width: 5px;
+      height: 5px;
       background: rgba(255,255,255,0.05);
-      cursor: col-resize;
+      cursor: row-resize;
       flex-shrink: 0;
       transition: background .15s;
       z-index: 5;
     }
     .drag-divider:hover,
     .drag-divider.dragging { background: rgba(163,75,255,0.4); }
-
-    /* Preview side */
-    .preview-side {
+    /* Preview section (bottom) */
+    .preview-section {
       display: flex;
       flex-direction: column;
       flex: 1;
-      min-width: 0;
+      min-height: 0;
     }
     .preview-bar {
       padding: 7px 14px;
@@ -168,14 +153,6 @@
       border: none;
       background: #fff;
     }
-
-    /* Mobile */
-    @media (max-width: 680px) {
-      .tool-body { flex-direction: column; }
-      .editor-side { width: 100% !important; height: 50%; }
-      .preview-side { height: 50%; }
-      .drag-divider { display: none; }
-    }
   </style>
 </head>
 <body>
@@ -189,24 +166,23 @@
       <span class="tool-tagline">— All in one coding tool</span>
     </header>
 
-    <div class="tool-body">
-      <!-- Editor -->
-      <div class="editor-side" id="editor-side">
-        <div class="tab-bar">
-          <button class="tab-btn active" data-tab="html">HTML</button>
-          <button class="tab-btn" data-tab="css">CSS</button>
-          <button class="tab-btn" data-tab="js">JS</button>
-          <button class="run-btn" id="run-btn">▶ Run</button>
-        </div>
-        <div class="editor-pane">
-          <textarea class="code-area" id="code-html" data-tab="html"
-            spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
-          >&lt;!-- HTML goes here --&gt;
+    <!-- Editor (top) -->
+    <div class="editor-section" id="editor-section">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="html">HTML</button>
+        <button class="tab-btn" data-tab="css">CSS</button>
+        <button class="tab-btn" data-tab="js">JS</button>
+        <button class="run-btn" id="run-btn">▶ Run</button>
+      </div>
+      <div class="editor-pane">
+        <textarea class="code-area" id="code-html" data-tab="html"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+        >&lt;!-- HTML goes here --&gt;
 &lt;h1&gt;Hello, Divine!&lt;/h1&gt;
-&lt;p&gt;Start coding. Type &lt;strong&gt;!activate&lt;/strong&gt; to activate your account.&lt;/p&gt;</textarea>
-          <textarea class="code-area hidden" id="code-css" data-tab="css"
-            spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
-          >/* CSS goes here */
+&lt;p&gt;Start coding below.&lt;/p&gt;</textarea>
+        <textarea class="code-area hidden" id="code-css" data-tab="css"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+        >/* CSS goes here */
 body {
   font-family: sans-serif;
   padding: 24px;
@@ -216,20 +192,19 @@ body {
 h1 {
   color: #ffd700;
 }</textarea>
-          <textarea class="code-area hidden" id="code-js" data-tab="js"
-            spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
-          >// JavaScript goes here
+        <textarea class="code-area hidden" id="code-js" data-tab="js"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+        >// JavaScript goes here
 console.log('Hello from Divine!');</textarea>
-        </div>
       </div>
+    </div>
 
-      <div class="drag-divider" id="drag-divider" aria-hidden="true"></div>
+    <div class="drag-divider" id="drag-divider" aria-hidden="true"></div>
 
-      <!-- Preview -->
-      <div class="preview-side" id="preview-side">
-        <div class="preview-bar">Preview</div>
-        <iframe id="preview-frame" sandbox="allow-scripts allow-modals allow-forms" title="Preview"></iframe>
-      </div>
+    <!-- Preview (bottom) -->
+    <div class="preview-section" id="preview-section">
+      <div class="preview-bar">Preview</div>
+      <iframe id="preview-frame" sandbox="allow-scripts allow-modals allow-forms" title="Preview"></iframe>
     </div>
   </div>
 
