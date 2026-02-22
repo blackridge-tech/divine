@@ -2527,7 +2527,7 @@ app.get("/api/owner/block-activation", async (req, res) => {
   try {
     if (!requireOwner(req, res)) return;
     const cur = await dbGet(`SELECT v FROM owner_state WHERE k='block_activation'`);
-    return res.json({ ok: true, enabled: cur?.v === "1", blocked: cur?.v === "1" });
+    return res.json({ ok: true, enabled: cur?.v === "1" });
   } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
 });
 
