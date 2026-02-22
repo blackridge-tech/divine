@@ -60,6 +60,7 @@ const CONFIG = {
 
 const COOKIE_USER = "divine_access";
 const COOKIE_OWNER_ONCE = "dv_owner_once";
+const COOKIE_OWNER = "dv_owner";
 const COOKIE_ACTIVATION = "dv_activated";
 const COOKIE_MOD = "dv_mod";
 const ownerOnceTokens = new Map();
@@ -151,44 +152,27 @@ async function revokeCurrentSession(req) {
   // However, if the token was copied elsewhere, it remains valid until expiry
 }
 
-function issueOwnerOnceCookie(res) {
+function issueOwnerJwtCookie(res) {
   const isProd = CONFIG.nodeEnv === "production";
-  const token = randomToken(24);
-  ownerOnceTokens.set(token, nowMs() + (5 * 60 * 1000));
-  res.cookie(COOKIE_OWNER_ONCE, token, {
+  const token = jwt.sign({ role: "owner" }, CONFIG.jwtSecret, { expiresIn: "48h" });
+  res.cookie(COOKIE_OWNER, token, {
     httpOnly: true,
     sameSite: "Lax",
     secure: isProd,
-    path: "/owner",
-    maxAge: 5 * 60 * 1000,
+    path: "/",
+    maxAge: 48 * 60 * 60 * 1000,
   });
 }
 
-function isValidOwnerOnceToken(tok) {
+function verifyOwnerJwtCookie(req) {
+  const tok = (req.cookies || {})[COOKIE_OWNER];
   if (!tok) return false;
-  const exp = ownerOnceTokens.get(String(tok));
-  if (!exp) return false;
-  if (nowMs() >= exp) {
-    ownerOnceTokens.delete(String(tok));
+  try {
+    const payload = jwt.verify(tok, CONFIG.jwtSecret);
+    return payload && payload.role === "owner";
+  } catch {
     return false;
   }
-  return true;
-}
-
-function consumeOwnerOnceCookie(req, res) {
-  const tok = req.cookies[COOKIE_OWNER_ONCE];
-  if (!isValidOwnerOnceToken(tok)) return false;
-  ownerOnceTokens.delete(String(tok));
-
-  const isProd = CONFIG.nodeEnv === "production";
-  res.cookie(COOKIE_OWNER_ONCE, "", {
-    httpOnly: true,
-    sameSite: "Lax",
-    secure: isProd,
-    path: "/owner",
-    maxAge: 0,
-  });
-  return true;
 }
 
 // -----------------------
@@ -508,6 +492,16 @@ CREATE TABLE IF NOT EXISTS dm_appeals (
 );`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_dm_appeals_status ON dm_appeals(status, created_at);`);
 
+  // Owner login history
+  await dbRun(`
+CREATE TABLE IF NOT EXISTS owner_logins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at INTEGER NOT NULL,
+  ip TEXT NOT NULL DEFAULT '',
+  user_agent TEXT NOT NULL DEFAULT ''
+);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_owner_logins_created ON owner_logins(created_at);`);
+
   // Client tracking table for /api/check and /api/hello
   await dbRun(`
 CREATE TABLE IF NOT EXISTS clients (
@@ -797,8 +791,7 @@ async function isUserDmBanned(userId) {
 }
 
 function requireOwner(req, res) {
-  const tok = req.cookies[COOKIE_OWNER_ONCE];
-  if (!isValidOwnerOnceToken(tok)) {
+  if (!verifyOwnerJwtCookie(req)) {
     res.status(401).json({ ok: false, error: "Owner authentication required" });
     return false;
   }
@@ -960,11 +953,37 @@ app.get("/activate", async (req, res) => {
 });
 app.get("/activate/register", (req, res) => res.redirect(302, "/activate"));
 
-// Owner page (same file; UI does pin overlay)
+// Owner gate page
 app.get("/owner", (req, res) => sendRepoFile(res, "owner/index.html"));
+app.get("/owner/", (req, res) => res.redirect(302, "/owner"));
 
-// Mod panel page
+// Owner dashboard page (protected by JWT cookie)
+app.get("/owner/dashboard", (req, res) => {
+  if (!verifyOwnerJwtCookie(req)) return res.redirect(302, "/owner");
+  return sendRepoFile(res, "owner/dashboard/index.html");
+});
+app.get("/owner/dashboard/", (req, res) => {
+  if (!verifyOwnerJwtCookie(req)) return res.redirect(302, "/owner");
+  return sendRepoFile(res, "owner/dashboard/index.html");
+});
+
+// Mod gate page
 app.get("/mod", (req, res) => sendRepoFile(res, "mod/index.html"));
+app.get("/mod/", (req, res) => res.redirect(302, "/mod"));
+
+// Mod dashboard page (protected by session cookie)
+app.get("/mod/dashboard", (req, res) => {
+  if (!verifyModCookie(req)) return res.redirect(302, "/mod");
+  return sendRepoFile(res, "mod/dashboard/index.html");
+});
+app.get("/mod/dashboard/", (req, res) => {
+  if (!verifyModCookie(req)) return res.redirect(302, "/mod");
+  return sendRepoFile(res, "mod/dashboard/index.html");
+});
+
+// Membership page
+app.get("/membership", (req, res) => sendRepoFile(res, "membership/index.html"));
+app.get("/membership/", (req, res) => sendRepoFile(res, "membership/index.html"));
 
 // Mod PIN endpoint
 const modPinLocks = new Map();
@@ -1453,7 +1472,7 @@ app.post("/api/me/username", async (req, res) => {
 });
 
 // Owner PIN API with lockout; issues short-lived cookie
-app.post("/owner/pin", (req, res) => {
+app.post("/owner/pin", async (req, res) => {
   const ip = getReqIp(req);
 
   if (isLocked(pinLocks.owner, ip)) {
@@ -1473,7 +1492,12 @@ app.post("/owner/pin", (req, res) => {
   }
 
   registerSuccess(pinLocks.owner, ip);
-  issueOwnerOnceCookie(res);
+  issueOwnerJwtCookie(res);
+  // Log the login
+  try {
+    const ua = String(req.headers["user-agent"] || "").slice(0, 512);
+    await dbRun(`INSERT INTO owner_logins(created_at, ip, user_agent) VALUES(?,?,?)`, [nowMs(), ip, ua]);
+  } catch {}
   return res.json({ ok: true });
 });
 
@@ -2499,6 +2523,14 @@ app.get("/api/owner/blocked-activations", async (req, res) => {
   } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
 });
 
+app.get("/api/owner/block-activation", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+    const cur = await dbGet(`SELECT v FROM owner_state WHERE k='block_activation'`);
+    return res.json({ ok: true, enabled: cur?.v === "1", blocked: cur?.v === "1" });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
+
 app.post("/api/owner/block-activation", async (req, res) => {
   try {
     if (!requireOwner(req, res)) return;
@@ -2541,9 +2573,19 @@ app.post("/api/owner/mod-settings", async (req, res) => {
   } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
 });
 
-// -----------------------
-// Auth protect /divine/* (including /divine/profile/*) + activity logging + redirect-on-next-load
-// -----------------------
+app.get("/api/owner/security/logins", async (req, res) => {
+  try {
+    if (!requireOwner(req, res)) return;
+    const rows = await dbAll(`SELECT id, created_at, ip, user_agent FROM owner_logins ORDER BY created_at DESC LIMIT 200`);
+    return res.json({ ok: true, logins: rows.map(r => ({
+      id: r.id,
+      createdAt: Number(r.created_at),
+      ip: r.ip || "",
+      userAgent: r.user_agent || "",
+      time: fmtTimeSec(r.created_at),
+    })) });
+  } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
+});
 app.use("/divine", async (req, res, next) => {
   try {
     const p = req.path || "/";
@@ -2650,19 +2692,14 @@ app.use(express.static(REPO_ROOT, {
   maxAge: CONFIG.nodeEnv === "production" ? "1h" : 0,
 }));
 
-// Owner route must validate cookie for assets + page view.
-// IMPORTANT: This must run BEFORE static serving for /owner assets if you want strictness.
-// Your UI will call /owner/pin and then load resources immediately.
+// Owner route: allow PIN post and gate page; protect dashboard assets with JWT
 app.use("/owner", (req, res, next) => {
-  // allow posting PIN without having cookie
+  // Allow PIN submission
   if (req.method === "POST" && req.path === "/pin") return next();
-
-  // If the request is for /owner itself, allow it so the page can show the PIN overlay.
-  // But any /owner/* asset fetch requires the cookie.
-  if (req.path === "/" || req.path === "") return next();
-
-  const ok = consumeOwnerOnceCookie(req, res);
-  if (!ok) return res.status(401).send("Owner PIN required.");
+  // Allow gate page and its static assets
+  if (req.path === "/" || req.path === "" || STATIC_EXT.test(req.path)) return next();
+  // Protect everything else (dashboard) with JWT
+  if (!verifyOwnerJwtCookie(req)) return res.status(401).send("Owner authentication required.");
   return next();
 });
 

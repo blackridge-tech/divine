@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mod Panel — Divine</title>
+  <link rel="stylesheet" href="/mod/styles.css" />
+</head>
+<body>
+  <div class="bg" aria-hidden="true"></div>
+  <div class="noise" aria-hidden="true"></div>
+
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">🛡️</div>
+        <div class="brandText">
+          <div class="brandTitle">Mod Panel</div>
+          <div class="brandSub" id="statusText">Active Session</div>
+        </div>
+      </div>
+      <div class="topActions">
+        <button class="btn ghost" id="refreshBtn" type="button">Refresh</button>
+        <button class="btn ghost" id="homeBtn" type="button">Home</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <nav class="nav">
+          <button class="navItem active" data-view="active-users" type="button">
+            <span class="navIcon">🟢</span><span>Active Users</span>
+          </button>
+          <button class="navItem" data-view="all-users" type="button">
+            <span class="navIcon">👥</span><span>All Users</span>
+          </button>
+        </nav>
+        <div class="sideFoot">
+          <div class="mini muted">Session expires in 30 min.</div>
+          <button id="relockBtn" class="btn ghost small" type="button">Lock</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <!-- ACTIVE USERS -->
+        <section class="view active" id="view-active-users">
+          <div class="hgroup">
+            <h1>Active Users</h1>
+            <p class="muted">Users seen in the last 10 minutes.</p>
+          </div>
+          <div class="panel">
+            <div class="panelHead">
+              <button class="btn primary" id="loadActiveBtn" type="button">Load</button>
+            </div>
+            <div class="tableWrap">
+              <table class="table">
+                <thead><tr><th>User</th><th>Last Seen</th><th>IP</th><th style="text-align:right">Actions</th></tr></thead>
+                <tbody id="activeBody"><tr><td colspan="4" class="muted">Not loaded.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ALL USERS -->
+        <section class="view" id="view-all-users">
+          <div class="hgroup">
+            <h1>All Users</h1>
+            <p class="muted">Full user list. Actions depend on what the owner has enabled.</p>
+          </div>
+          <div class="panel">
+            <div class="panelHead">
+              <div class="row">
+                <input id="userSearch" class="input" placeholder="Search username…" autocomplete="off" />
+                <button class="btn primary" id="loadUsersBtn" type="button">Load</button>
+              </div>
+            </div>
+            <div class="tableWrap">
+              <table class="table">
+                <thead><tr><th>User</th><th>Status</th><th>Last Seen</th><th style="text-align:right">Actions</th></tr></thead>
+                <tbody id="usersBody"><tr><td colspan="4" class="muted">Not loaded.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Ban Modal -->
+  <dialog class="modal" id="banModal">
+    <form method="dialog" class="modalCard">
+      <div class="modalHead">
+        <div><div class="modalTitle">Ban User</div><div class="mini muted">e.g. 1h, 3d, permanent</div></div>
+        <button class="x" value="cancel" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="form">
+        <div class="formRow">
+          <label class="label">Username</label>
+          <input id="banUser" class="input" placeholder="Username" autocomplete="off" />
+        </div>
+        <div class="formRow">
+          <label class="label">Duration</label>
+          <input id="banDuration" class="input" placeholder="1h, 3d, permanent" autocomplete="off" />
+        </div>
+        <div class="formRow">
+          <label class="label">Reason</label>
+          <textarea id="banReason" class="textarea" placeholder="Reason…" maxlength="300"></textarea>
+        </div>
+        <div class="formRow">
+          <button id="banSubmitBtn" class="btn danger" type="button">Ban</button>
+          <button class="btn ghost" value="cancel" type="submit">Cancel</button>
+        </div>
+        <div class="msg" id="banMsg"></div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Redirect Modal -->
+  <dialog class="modal" id="redirectModal">
+    <form method="dialog" class="modalCard">
+      <div class="modalHead">
+        <div><div class="modalTitle">Redirect User</div><div class="mini muted">Site paths only (e.g. /divine/)</div></div>
+        <button class="x" value="cancel" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="form">
+        <div class="formRow">
+          <label class="label">Path</label>
+          <input id="redirectPath" class="input" placeholder="/divine/" autocomplete="off" />
+        </div>
+        <div class="formRow">
+          <button id="redirectSubmitBtn" class="btn primary" type="button">Set Redirect</button>
+          <button class="btn ghost" value="cancel" type="submit">Cancel</button>
+        </div>
+        <div class="msg" id="redirectMsg"></div>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="/mod/dashboard/script.js"></script>
+</body>
+</html>

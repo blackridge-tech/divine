@@ -3,600 +3,90 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Owner Panel</title>
+  <title>Owner Panel — Authentication</title>
   <link rel="stylesheet" href="/owner/styles.css" />
+  <style>
+    html, body { height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .gate-wrap { position: relative; z-index: 1; width: 100%; max-width: 400px; padding: 24px; }
+    .gate-card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 20px;
+      padding: 36px 32px 28px;
+      box-shadow: 0 22px 70px rgba(0,0,0,0.62);
+    }
+    .gate-top { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
+    .gate-icon { font-size: 2.2rem; }
+    .gate-title { font-size: 1.25rem; font-weight: 700; }
+    .gate-sub { font-size: 0.82rem; opacity: 0.6; margin-top: 2px; }
+    .gate-field { margin-bottom: 18px; }
+    .gate-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .gate-actions .btn { flex: 1; }
+  </style>
 </head>
 <body>
   <div class="bg" aria-hidden="true"></div>
   <div class="noise" aria-hidden="true"></div>
-
-  <!-- App -->
-  <div class="app" id="app" aria-label="Owner Panel">
-    <!-- Top bar -->
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo" aria-hidden="true">◇</div>
-        <div class="brandText">
-          <div class="brandTitle">Owner Panel</div>
-          <div class="brandSub" id="statusText">Locked</div>
-        </div>
-      </div>
-
-      <div class="topActions">
-        <button class="btn ghost" id="refreshBtn" type="button">Refresh</button>
-        <button class="btn ghost" id="homeBtn" type="button">Home</button>
-      </div>
-    </header>
-
-    <div class="layout">
-      <!-- Sidebar -->
-      <aside class="sidebar" aria-label="Owner navigation">
-        <nav class="nav">
-          <button class="navItem active" data-view="overview" type="button">
-            <span class="navIcon">▣</span><span>Overview</span>
-          </button>
-          <button class="navItem" data-view="users" type="button">
-            <span class="navIcon">👥</span><span>Users</span>
-          </button>
-          <button class="navItem" data-view="broadcast" type="button">
-            <span class="navIcon">📣</span><span>Broadcast</span>
-          </button>
-          <button class="navItem" data-view="newsletter" type="button">
-            <span class="navIcon">✉️</span><span>Newsletter</span><span class="pill">Soon</span>
-          </button>
-          <button class="navItem" data-view="activity" type="button">
-            <span class="navIcon">🕒</span><span>Activity</span>
-          </button>
-          <button class="navItem" data-view="bans" type="button">
-            <span class="navIcon">⛔</span><span>Bans</span>
-          </button>
-          <button class="navItem" data-view="reports" type="button">
-            <span class="navIcon">🚩</span><span>Reports</span>
-          </button>
-          <button class="navItem" data-view="active-users" type="button">
-            <span class="navIcon">🟢</span><span>Active Users</span>
-          </button>
-          <button class="navItem" data-view="mod" type="button">
-            <span class="navIcon">🛡️</span><span>Mod Panel</span>
-          </button>
-          <button class="navItem danger" data-view="lockdown" type="button">
-            <span class="navIcon">🧨</span><span>Lockdown</span>
-          </button>
-          <button class="navItem" data-view="settings" type="button">
-            <span class="navIcon">⚙️</span><span>Settings</span><span class="pill">Soon</span>
-          </button>
-        </nav>
-
-        <div class="sideFoot">
-          <div class="mini muted">
-            PIN required on every reload.
-          </div>
-          <button id="relockBtn" class="btn ghost small" type="button">Lock</button>
-        </div>
-      </aside>
-
-      <!-- Main content -->
-      <main class="main" role="main">
-        <!-- OVERVIEW -->
-        <section class="view active" id="view-overview" aria-label="Overview">
-          <div class="hgroup">
-            <h1>Overview</h1>
-            <p class="muted">Live snapshot of the site.</p>
-          </div>
-
-          <div class="stats">
-            <div class="statCard">
-              <div class="statLabel">Active users</div>
-              <div class="statValue" id="statActive">—</div>
-              <div class="statHint muted" id="statActiveHint">Requires API.</div>
-            </div>
-            <div class="statCard">
-              <div class="statLabel">Banned users</div>
-              <div class="statValue" id="statBanned">—</div>
-              <div class="statHint muted" id="statBannedHint">Requires API.</div>
-            </div>
-            <div class="statCard">
-              <div class="statLabel">Lockdown</div>
-              <div class="statValue" id="statLockdown">—</div>
-              <div class="statHint muted" id="statLockdownHint">Requires API.</div>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panelHead">
-              <h2>Recent Activity</h2>
-              <button class="btn ghost small" id="loadActivityBtn" type="button">Load</button>
-            </div>
-
-            <div class="tableWrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>User</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody id="recentActivityBody">
-                  <tr><td colspan="3" class="muted">No data loaded.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- USERS -->
-        <section class="view" id="view-users" aria-label="Users">
-          <div class="hgroup">
-            <h1>Users</h1>
-            <p class="muted">Manage users: ↩️ revoke, 🔗 redirect, 👁️ activity, 🛑 ban.</p>
-          </div>
-
-          <div class="panel">
-            <div class="panelHead">
-              <div class="row">
-                <input id="userSearch" class="input" placeholder="Search username..." autocomplete="off" />
-                <button class="btn primary" id="loadUsersBtn" type="button">Load Users</button>
-              </div>
-              <div class="muted mini">IDs should only be visible here and to the user themselves.</div>
-            </div>
-
-            <div class="tableWrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>User ID</th>
-                    <th>Last IP</th>
-                    <th>Status</th>
-                    <th style="text-align:right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="usersBody">
-                  <tr><td colspan="5" class="muted">No data loaded.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- BROADCAST -->
-        <section class="view" id="view-broadcast" aria-label="Broadcast">
-          <div class="hgroup">
-            <h1>Broadcast</h1>
-            <p class="muted">Send a message globally or to a single user.</p>
-          </div>
-
-          <div class="panel">
-            <div class="panelHead">
-              <h2>Create Broadcast</h2>
-            </div>
-
-            <div class="form">
-              <div class="formRow">
-                <label class="radio">
-                  <input type="radio" name="bcScope" value="global" checked />
-                  <span>Global</span>
-                </label>
-                <label class="radio">
-                  <input type="radio" name="bcScope" value="user" />
-                  <span>Single user</span>
-                </label>
-              </div>
-
-              <div class="formRow" id="bcUserRow" hidden>
-                <label class="label">Target username</label>
-                <input id="bcUser" class="input" placeholder="Username" autocomplete="off" />
-              </div>
-
-              <div class="formRow">
-                <label class="label">Message</label>
-                <textarea id="bcMsg" class="textarea" placeholder="Write your broadcast…" maxlength="800"></textarea>
-                <div class="mini muted">Tip: keep it short. Newlines supported.</div>
-              </div>
-
-              <div class="formRow">
-                <button id="sendBroadcastBtn" class="btn primary" type="button">Send</button>
-                <button id="clearBroadcastBtn" class="btn ghost" type="button">Clear</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- NEWSLETTER -->
-        <section class="view" id="view-newsletter" aria-label="Newsletter">
-          <div class="hgroup">
-            <h1>Newsletter</h1>
-            <p class="muted">Coming soon — will connect to Sendgrid later.</p>
-          </div>
-
-          <div class="panel">
-            <div class="empty">
-              <div class="emptyIcon">✉️</div>
-              <div class="emptyTitle">Coming Soon</div>
-              <div class="emptyText muted">This section will manage emails and newsletter sends.</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ACTIVITY -->
-        <section class="view" id="view-activity" aria-label="Activity">
-          <div class="hgroup">
-            <h1>Activity</h1>
-            <p class="muted">Logs: “User X accessed Y” with timestamps down to seconds.</p>
-          </div>
-
-          <div class="panel">
-            <div class="panelHead">
-              <div class="row">
-                <button class="btn primary" id="loadAllActivityBtn" type="button">Load Activity</button>
-                <button class="btn ghost" id="clearActivityBtn" type="button">Clear Table</button>
-              </div>
-              <div class="mini muted">Requires server logging endpoints.</div>
-            </div>
-
-            <div class="tableWrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>User</th>
-                    <th>Page</th>
-                    <th>Extra</th>
-                  </tr>
-                </thead>
-                <tbody id="activityBody">
-                  <tr><td colspan="4" class="muted">No data loaded.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- BANS -->
-        <section class="view" id="view-bans" aria-label="Bans">
-          <div class="hgroup">
-            <h1>Bans</h1>
-            <p class="muted">Manage site-wide and DM-only bans with duration + reason.</p>
-          </div>
-
-          <!-- Ban Type Tabs -->
-          <div class="tabs">
-            <button class="tab active" data-tab="site-bans">Site Bans</button>
-            <button class="tab" data-tab="dm-bans">DM Bans</button>
-          </div>
-
-          <!-- Site Bans Panel -->
-          <div class="panel banPanel" id="panel-site-bans">
-            <div class="panelHead">
-              <div class="row">
-                <button class="btn primary" id="loadBansBtn" type="button">Load Site Bans</button>
-                <button class="btn ghost" id="openBanModalBtn" type="button">Ban a user</button>
-              </div>
-              <div class="mini muted">Duration can be typed (1h/3d/permanent).</div>
-            </div>
-
-            <div class="tableWrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>User ID</th>
-                    <th>Ends</th>
-                    <th>Reason</th>
-                    <th style="text-align:right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="bansBody">
-                  <tr><td colspan="5" class="muted">No data loaded.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- DM Bans Panel -->
-          <div class="panel banPanel" id="panel-dm-bans" style="display: none;">
-            <div class="panelHead">
-              <div class="row">
-                <button class="btn primary" id="loadDmBansBtn" type="button">Load DM Bans</button>
-                <button class="btn ghost" id="openDmBanModalBtn" type="button">DM Ban a user</button>
-              </div>
-              <div class="mini muted">DM-only bans restrict Direct Messages access only.</div>
-            </div>
-
-            <div class="tableWrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>User ID</th>
-                    <th>Ends</th>
-                    <th>Reason</th>
-                    <th style="text-align:right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="dmBansBody">
-                  <tr><td colspan="5" class="muted">No data loaded.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- REPORTS -->
-        <section class="view" id="view-reports" aria-label="Reports">
-          <div class="hgroup">
-            <h1>Reports & Appeals</h1>
-            <p class="muted">User reports and DM ban appeals. Dismiss with X or take action.</p>
-          </div>
-
-          <!-- Reports Type Tabs -->
-          <div class="tabs">
-            <button class="tab active" data-tab="user-reports">User Reports</button>
-            <button class="tab" data-tab="dm-appeals">DM Appeals</button>
-          </div>
-
-          <!-- User Reports Panel -->
-          <div class="panel reportsPanel" id="panel-user-reports">
-            <div class="panelHead">
-              <div class="row">
-                <button class="btn primary" id="loadReportsBtn" type="button">Load Reports</button>
-                <button class="btn ghost" id="clearReportsBtn" type="button">Clear List</button>
-              </div>
-            </div>
-
-            <div class="list" id="reportsList">
-              <div class="muted">No data loaded.</div>
-            </div>
-          </div>
-
-          <!-- DM Appeals Panel -->
-          <div class="panel reportsPanel" id="panel-dm-appeals" style="display: none;">
-            <div class="panelHead">
-              <div class="row">
-                <button class="btn primary" id="loadDmAppealsBtn" type="button">Load DM Appeals</button>
-                <button class="btn ghost" id="clearDmAppealsBtn" type="button">Clear List</button>
-              </div>
-            </div>
-
-            <div class="list" id="dmAppealsList">
-              <div class="muted">No data loaded.</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ACTIVE USERS -->
-        <section class="view" id="view-active-users" aria-label="Active Users">
-          <div class="hgroup">
-            <h1>Active Users</h1>
-            <p class="muted">Users seen in the last 10 minutes.</p>
-          </div>
-          <div class="panel">
-            <div class="panelHead">
-              <button class="btn primary" id="loadOwnerActiveBtn" type="button">Load</button>
-            </div>
-            <div class="tableWrap">
-              <table class="table">
-                <thead><tr><th>User</th><th>Last Seen</th><th>IP</th><th style="text-align:right">Actions</th></tr></thead>
-                <tbody id="ownerActiveBody"><tr><td colspan="4" class="muted">Not loaded.</td></tr></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- MOD PANEL MANAGEMENT -->
-        <section class="view" id="view-mod" aria-label="Mod Panel">
-          <div class="hgroup">
-            <h1>Mod Panel</h1>
-            <p class="muted">Control what moderators can do. PIN resets to MOD_PIN env on server restart.</p>
-          </div>
-
-          <div class="panel" style="margin-bottom:14px">
-            <div class="panelHead"><h2>Permissions</h2></div>
-            <div class="form">
-              <div class="row">
-                <label class="radio"><input type="checkbox" id="modPermBan" /> <span>Ban</span></label>
-                <label class="radio"><input type="checkbox" id="modPermRefresh" /> <span>Refresh</span></label>
-                <label class="radio"><input type="checkbox" id="modPermRevoke" /> <span>Revoke</span></label>
-                <label class="radio"><input type="checkbox" id="modPermRedirect" /> <span>Redirect</span></label>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel" style="margin-bottom:14px">
-            <div class="panelHead"><h2>Change PIN</h2></div>
-            <div class="form">
-              <div class="formRow">
-                <label class="label">New MOD PIN</label>
-                <input id="modNewPin" class="input" type="password" placeholder="Leave blank to keep current" autocomplete="new-password" />
-              </div>
-            </div>
-          </div>
-
-          <div class="row">
-            <button class="btn primary" id="loadModSettingsBtn" type="button">Load Settings</button>
-            <button class="btn ghost" id="saveModSettingsBtn" type="button">Save Changes</button>
-          </div>
-          <div class="msg" id="modSettingsMsg" style="margin-top:10px"></div>
-        </section>
-
-        <!-- LOCKDOWN -->
-        <section class="view" id="view-lockdown" aria-label="Lockdown">
-          <div class="hgroup">
-            <h1>Lockdown</h1>
-            <p class="muted">When enabled: only /owner stays available, everything else goes to / (under construction).</p>
-          </div>
-
-          <div class="panel dangerPanel" style="margin-bottom:14px">
-            <div class="lockBox">
-              <div class="lockState">
-                <div class="lockLight" id="lockLight"></div>
-                <div>
-                  <div class="lockTitle" id="lockTitle">Lockdown: Unknown</div>
-                  <div class="lockSub muted" id="lockSub">Requires API to persist state.</div>
-                </div>
-              </div>
-              <div class="lockActions">
-                <button class="btn danger" id="toggleLockdownBtn" type="button">Toggle Lockdown</button>
-                <button class="btn ghost" id="simulateLockdownUiBtn" type="button">Simulate UI</button>
-              </div>
-              <div class="mini muted">
-                During lockdown, the hidden /activate trigger should disappear on the Under Construction page.
-              </div>
-            </div>
-          </div>
-
-          <div class="panel dangerPanel" style="margin-bottom:14px">
-            <div class="panelHead"><h2>Block Activation</h2></div>
-            <div class="lockBox">
-              <div class="lockState">
-                <div class="lockLight" id="blockActLight"></div>
-                <div>
-                  <div class="lockTitle" id="blockActTitle">Block Activation: Unknown</div>
-                  <div class="lockSub muted">When enabled, users who try to activate get a &ldquo;Activations are disabled&rdquo; error.</div>
-                </div>
-              </div>
-              <div class="lockActions">
-                <button class="btn danger" id="toggleBlockActBtn" type="button">Toggle</button>
-                <button class="btn ghost" id="loadBlockActBtn" type="button">Refresh</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel">
-            <div class="panelHead">
-              <h2>Blocked Activation Log</h2>
-              <button class="btn ghost small" id="loadBlockedActLogBtn" type="button">Load</button>
-            </div>
-            <div class="tableWrap">
-              <table class="table">
-                <thead><tr><th>Time</th><th>OS</th><th>IP</th><th>Reason</th><th>User Agent</th></tr></thead>
-                <tbody id="blockedActLogBody"><tr><td colspan="5" class="muted">Not loaded.</td></tr></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- SETTINGS -->
-        <section class="view" id="view-settings" aria-label="Settings">
-          <div class="hgroup">
-            <h1>Settings</h1>
-            <p class="muted">Coming soon.</p>
-          </div>
-
-          <div class="panel">
-            <div class="empty">
-              <div class="emptyIcon">⚙️</div>
-              <div class="emptyTitle">Coming Soon</div>
-              <div class="emptyText muted">This section will contain advanced owner settings.</div>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
-  </div>
-
-  <!-- PIN Overlay -->
-  <div class="overlay" id="pinOverlay" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
-    <div class="pinCard">
-      <div class="pinTop">
-        <div class="pinIcon" aria-hidden="true">🔐</div>
+  <div class="gate-wrap">
+    <div class="gate-card" role="main">
+      <div class="gate-top">
+        <div class="gate-icon" aria-hidden="true">🔐</div>
         <div>
-          <div class="pinTitle" id="pinTitle">Owner Verification</div>
-          <div class="pinText muted">Enter OWNER PIN to unlock. Required every reload.</div>
+          <div class="gate-title">Authentication Required</div>
+          <div class="gate-sub">Enter your Owner PIN to access the panel.</div>
         </div>
       </div>
-
-      <div class="pinField">
+      <div class="gate-field">
         <label class="label" for="ownerPin">OWNER PIN</label>
-        <input id="ownerPin" class="input" type="password" autocomplete="off" placeholder="••••••••" />
+        <input id="ownerPin" class="input" type="password" autocomplete="off" placeholder="••••••••" autofocus />
       </div>
-
-      <div class="row">
-        <button id="pinEnterBtn" class="btn primary" type="button">Enter</button>
-        <button id="pinExitBtn" class="btn ghost" type="button">Exit</button>
+      <div class="gate-actions">
+        <button id="enterBtn" class="btn primary" type="button">Enter</button>
+        <button id="backBtn" class="btn ghost" type="button">Back</button>
       </div>
-
-      <div class="msg" id="pinMsg" role="status" aria-live="polite"></div>
+      <div class="msg" id="gateMsg" role="status" aria-live="polite" style="margin-top:12px"></div>
     </div>
   </div>
+  <script>
+    (function () {
+      const pinInput = document.getElementById("ownerPin");
+      const enterBtn = document.getElementById("enterBtn");
+      const backBtn  = document.getElementById("backBtn");
+      const gateMsg  = document.getElementById("gateMsg");
 
-  <!-- Toast -->
-  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+      function setMsg(text, kind) {
+        gateMsg.textContent = text || "";
+        gateMsg.className = "msg" + (kind ? " " + kind : "");
+      }
 
-  <!-- Modals -->
-  <dialog class="modal" id="banModal">
-    <form method="dialog" class="modalCard">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle">Ban User</div>
-          <div class="mini muted">Duration: type like “1h”, “6h”, “3d”, “permanent”.</div>
-        </div>
-        <button class="x" value="cancel" aria-label="Close">✕</button>
-      </div>
+      async function submit() {
+        const pin = pinInput.value.trim();
+        if (!pin) { setMsg("Enter the owner PIN.", "err"); return; }
+        enterBtn.disabled = true;
+        setMsg("Verifying\u2026", "");
+        try {
+          const res = await fetch("/owner/pin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pinAttempt: pin })
+          });
+          const data = await res.json().catch(function() { return {}; });
+          if (!res.ok || !data.ok) {
+            setMsg(data.error || "Denied", "err");
+            return;
+          }
+          window.location.href = "/owner/dashboard";
+        } catch (e) {
+          setMsg("Request failed.", "err");
+        } finally {
+          enterBtn.disabled = false;
+        }
+      }
 
-      <div class="form">
-        <div class="formRow">
-          <label class="label" for="banUser">Target username</label>
-          <input id="banUser" class="input" placeholder="Username" autocomplete="off" />
-        </div>
-
-        <div class="formRow">
-          <label class="label" for="banDuration">Duration</label>
-          <input id="banDuration" class="input" placeholder="e.g. 1h, 7d, permanent" autocomplete="off" />
-        </div>
-
-        <div class="formRow">
-          <label class="label" for="banReason">Reason</label>
-          <textarea id="banReason" class="textarea" placeholder="Reason..." maxlength="600"></textarea>
-        </div>
-
-        <div class="formRow">
-          <button id="banSubmitBtn" class="btn danger" type="button">Ban</button>
-          <button class="btn ghost" value="cancel" type="submit">Cancel</button>
-        </div>
-
-        <div class="msg" id="banMsg"></div>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog class="modal" id="dmBanModal">
-    <form method="dialog" class="modalCard">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle">DM Ban User</div>
-          <div class="mini muted">Restricts Direct Messages access only. Duration: "1h", "3d", "permanent".</div>
-        </div>
-        <button class="x" value="cancel" aria-label="Close">✕</button>
-      </div>
-
-      <div class="form">
-        <div class="formRow">
-          <label class="label" for="dmBanUser">Target username</label>
-          <input id="dmBanUser" class="input" placeholder="Username" autocomplete="off" />
-        </div>
-
-        <div class="formRow">
-          <label class="label" for="dmBanDuration">Duration</label>
-          <input id="dmBanDuration" class="input" placeholder="e.g. 1h, 7d, permanent" autocomplete="off" />
-        </div>
-
-        <div class="formRow">
-          <label class="label" for="dmBanReason">Reason</label>
-          <textarea id="dmBanReason" class="textarea" placeholder="Reason..." maxlength="600"></textarea>
-        </div>
-
-        <div class="formRow">
-          <button id="dmBanSubmitBtn" class="btn danger" type="button">DM Ban</button>
-          <button class="btn ghost" value="cancel" type="submit">Cancel</button>
-        </div>
-
-        <div class="msg" id="dmBanMsg"></div>
-      </div>
-    </form>
-  </dialog>
-
-  <script src="/owner/script.js"></script>
+      enterBtn.addEventListener("click", submit);
+      pinInput.addEventListener("keydown", function(e) { if (e.key === "Enter") submit(); });
+      backBtn.addEventListener("click", function() { window.location.href = "/"; });
+    })();
+  </script>
 </body>
 </html>

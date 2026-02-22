@@ -1,0 +1,214 @@
+:root {
+  --bg0: #05050a;
+  --bg1: #070816;
+  --gold: #FFD700;
+  --gold2: #ffd24a;
+  --silver: #c0c0c0;
+  --silver2: #e8e8e8;
+  --purple: #a34bff;
+  --text: #f6f1ff;
+  --muted: rgba(246,241,255,0.65);
+  --line: rgba(255,255,255,0.10);
+  --panel: rgba(255,255,255,0.06);
+  --radius: 20px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 700px at 10% -10%, #161640, transparent),
+    radial-gradient(900px 600px at 120% 10%, #1c0f2a, transparent),
+    radial-gradient(900px 700px at 70% 120%, #0c1626, transparent),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+  overflow-x: hidden;
+}
+
+.page-bg {
+  position: fixed;
+  inset: -30%;
+  background:
+    radial-gradient(closest-side at 24% 18%, rgba(163,75,255,0.18), transparent 60%),
+    radial-gradient(closest-side at 70% 70%, rgba(255,215,0,0.12), transparent 60%),
+    radial-gradient(closest-side at 70% 14%, rgba(79,176,229,0.10), transparent 55%);
+  filter: blur(24px);
+  animation: drift 14s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes drift {
+  0%   { transform: translate3d(-2%, -1%, 0) rotate(-2deg) scale(1.02); }
+  100% { transform: translate3d(2%,  1%, 0) rotate( 2deg) scale(1.06); }
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+.page-header {
+  text-align: center;
+  margin-bottom: 56px;
+}
+
+.back-btn {
+  display: inline-block;
+  margin-bottom: 28px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color .15s;
+}
+.back-btn:hover { color: var(--text); }
+
+.page-title {
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-weight: 800;
+  margin: 0 0 12px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.page-title .brand {
+  background: linear-gradient(135deg, var(--purple), var(--gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.page-sub {
+  color: var(--muted);
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* Cards grid */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  align-items: stretch;
+}
+@media (max-width: 700px) {
+  .cards { grid-template-columns: 1fr; max-width: 380px; margin: 0 auto; }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 36px 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  transition: transform .2s, box-shadow .2s;
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 28px 60px rgba(0,0,0,0.5);
+}
+
+/* Badge */
+.card-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.card-badge.silver { color: var(--silver); }
+.card-badge.gold   { color: var(--gold); }
+
+/* Price */
+.card-price {
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 6px;
+  letter-spacing: -0.03em;
+}
+.card-currency {
+  font-size: 1rem;
+  font-weight: 500;
+  opacity: 0.55;
+  vertical-align: super;
+}
+.card-per {
+  font-size: 0.9rem;
+  font-weight: 400;
+  opacity: 0.55;
+}
+
+/* Silver card accents */
+.card-silver {
+  border-color: rgba(192,192,192,0.28);
+  background: linear-gradient(160deg, rgba(192,192,192,0.07) 0%, rgba(255,255,255,0.04) 100%);
+}
+.card-silver .card-price { color: var(--silver2); }
+
+/* Gold card accents */
+.card-gold {
+  border-color: rgba(255,215,0,0.30);
+  background: linear-gradient(160deg, rgba(255,215,0,0.09) 0%, rgba(255,255,255,0.04) 100%);
+}
+.card-gold .card-price { color: var(--gold2); }
+
+/* Features list */
+.card-features {
+  list-style: none;
+  margin: 20px 0 28px;
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card-features li {
+  font-size: 0.92rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-features li::before {
+  content: "✓";
+  color: rgba(34,197,94,0.85);
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+/* CTA buttons */
+.card-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 0;
+  border-radius: 12px;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: not-allowed;
+  transition: opacity .15s;
+  text-align: center;
+  margin-top: auto;
+}
+.card-btn.current {
+  background: rgba(255,255,255,0.08);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.card-btn.silver-btn {
+  background: linear-gradient(135deg, rgba(192,192,192,0.25), rgba(192,192,192,0.12));
+  color: var(--silver2);
+  border: 1px solid rgba(192,192,192,0.30);
+}
+.card-btn.gold-btn {
+  background: linear-gradient(135deg, rgba(255,215,0,0.28), rgba(255,215,0,0.12));
+  color: var(--gold2);
+  border: 1px solid rgba(255,215,0,0.35);
+}
+.card-btn:disabled { opacity: 0.7; }
