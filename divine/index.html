@@ -18,10 +18,99 @@
 
   <div class="auth-gate" id="authGate" hidden>
     <section class="auth-gate-card" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
-      <h2 id="authGateTitle">Create your Divine account to continue.</h2>
-      <div class="auth-gate-actions">
-        <a class="tile auth-gate-btn" href="/activate/register?tab=register">Create Account</a>
-        <a class="auth-gate-link" href="/activate/register?tab=login">Have an account? Log In!</a>
+      <div class="auth-gate-top">
+        <div class="auth-gate-mark" aria-hidden="true">◇</div>
+        <div>
+          <h2 id="authGateTitle">Account</h2>
+          <p class="auth-gate-lead">Log in or create your Divine account.</p>
+        </div>
+      </div>
+
+      <div class="auth-gate-tabs" role="tablist" aria-label="Account tabs">
+        <button class="auth-gate-tab" id="gate-tab-login" aria-selected="true" type="button">Login</button>
+        <button class="auth-gate-tab" id="gate-tab-register" aria-selected="false" type="button">Register</button>
+        <button class="auth-gate-tab" id="gate-tab-recover" aria-selected="false" type="button">Recover</button>
+      </div>
+
+      <section id="gate-panel-login" class="auth-gate-panel" aria-labelledby="gate-tab-login">
+        <div class="auth-gate-grid2">
+          <div class="auth-gate-field">
+            <label for="gate-login-user">Username</label>
+            <input id="gate-login-user" placeholder="Username" autocomplete="off" />
+          </div>
+          <div class="auth-gate-field">
+            <label for="gate-login-pass">Password</label>
+            <input id="gate-login-pass" type="password" placeholder="Password" autocomplete="off" />
+          </div>
+        </div>
+        <div class="auth-gate-btn-row">
+          <button id="gate-login-btn" class="auth-gate-primary" type="button">Login</button>
+        </div>
+        <div class="auth-gate-msg" id="gate-login-msg" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="gate-panel-register" class="auth-gate-panel" hidden aria-labelledby="gate-tab-register">
+        <div class="auth-gate-grid2">
+          <div class="auth-gate-field">
+            <label for="gate-reg-user">Username</label>
+            <input id="gate-reg-user" placeholder="Username" autocomplete="off" />
+          </div>
+          <div class="auth-gate-field">
+            <label for="gate-reg-email">Email</label>
+            <input id="gate-reg-email" placeholder="Email" autocomplete="off" />
+          </div>
+        </div>
+        <div class="auth-gate-grid2">
+          <div class="auth-gate-field">
+            <label for="gate-reg-pass">Password</label>
+            <input id="gate-reg-pass" type="password" placeholder="Password" autocomplete="off" />
+          </div>
+          <div class="auth-gate-field">
+            <label for="gate-reg-pass2">Confirm Password</label>
+            <input id="gate-reg-pass2" type="password" placeholder="Confirm password" autocomplete="off" />
+          </div>
+        </div>
+        <div class="auth-gate-checks">
+          <label class="auth-gate-check">
+            <input id="gate-reg-emails" type="checkbox" checked />
+            <span>I would like to receive emails when updates release</span>
+          </label>
+          <label class="auth-gate-check">
+            <input id="gate-reg-consent" type="checkbox" />
+            <span>I consent to the <a href="/agreement" target="_blank" rel="noopener">agreement</a></span>
+          </label>
+        </div>
+        <div class="auth-gate-btn-row">
+          <button id="gate-reg-btn" class="auth-gate-primary" type="button">Create Account</button>
+        </div>
+        <div class="auth-gate-msg" id="gate-reg-msg" role="status" aria-live="polite"></div>
+      </section>
+
+      <section id="gate-panel-recover" class="auth-gate-panel" hidden aria-labelledby="gate-tab-recover">
+        <div class="auth-gate-callout">
+          <div class="auth-gate-callout-title">Recovery</div>
+          <div class="auth-gate-callout-text">
+            Recovery uses your <b>private</b> User ID. If you don't have it, you cannot recover.
+          </div>
+        </div>
+        <div class="auth-gate-grid2">
+          <div class="auth-gate-field">
+            <label for="gate-rec-id">User ID</label>
+            <input id="gate-rec-id" placeholder="eX5G33PtT2Q9lJ6f" autocomplete="off" />
+          </div>
+          <div class="auth-gate-field">
+            <label for="gate-rec-pass">New Password</label>
+            <input id="gate-rec-pass" type="password" placeholder="New password" autocomplete="off" />
+          </div>
+        </div>
+        <div class="auth-gate-btn-row">
+          <button id="gate-rec-btn" class="auth-gate-primary" type="button">Set New Password</button>
+        </div>
+        <div class="auth-gate-msg" id="gate-rec-msg" role="status" aria-live="polite"></div>
+      </section>
+
+      <div class="auth-gate-footer">
+        <div class="auth-gate-footer-note">Tip: You'll find your User ID later in your profile under <b>/divine/profile</b>.</div>
       </div>
     </section>
   </div>

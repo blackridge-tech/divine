@@ -1114,7 +1114,7 @@ app.post("/api/register", async (req, res) => {
 
     await dbRun(
       `INSERT INTO users(id, username, password_hash, email, bio, created_at, token_version, last_ip, banned_until, ban_reason, username_changed_at, activated_at, activation_token)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [id, username, hash, email, "", createdAt, 0, "", 0, "", 0, 0, ""]
     );
 

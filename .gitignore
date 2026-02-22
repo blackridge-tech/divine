@@ -4,3 +4,5 @@ node_modules/
 *.sqlite-wal
 .env
 .DS_Store
+data/exports/
+data/snapshots/
