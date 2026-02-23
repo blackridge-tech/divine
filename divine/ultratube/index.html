@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ultratube</title>
+  <link rel="icon" href="/divine/assets/divine-fav.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="ultratube-app" id="ultratubeApp">
+
+  <!-- ── Top bar ─────────────────────────────── -->
+  <header class="ultratube-topbar" role="banner">
+    <div class="ultratube-topbar-left">
+      <a href="/divine/ultratube/" aria-label="Ultratube home">
+        <img class="ultratube-logo" src="ultratube.png" alt="Ultratube" id="utLogo" />
+      </a>
+    </div>
+
+    <div class="ultratube-search-wrap">
+      <form class="ultratube-search-form" id="utSearchForm" role="search" aria-label="Search videos">
+        <input
+          class="ultratube-search-input"
+          id="utSearchInput"
+          type="search"
+          placeholder="Search videos or @channel…"
+          aria-label="Search query"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="ultratube-search-btn" type="submit" aria-label="Submit search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"/>
+            <path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </form>
+    </div>
+
+    <div class="ultratube-topbar-right">
+      <button
+        class="ultratube-settings-btn"
+        id="utSettingsBtn"
+        type="button"
+        aria-label="Settings"
+        aria-expanded="false"
+        aria-controls="utSettingsPanel"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1.65 1.5V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3.6 15a1.65 1.65 0 0 0-1.5-1.65H2a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 3.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 3.6a1.65 1.65 0 0 0 1.65-1.5V2a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 16 3.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.4 8a1.65 1.65 0 0 0 1.5 1.65H22a2 2 0 0 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15Z" stroke="currentColor" stroke-width="2"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Settings panel (dropdown) ────────────── -->
+  <div class="ultratube-settings-panel" id="utSettingsPanel" hidden role="dialog" aria-label="Settings">
+    <div class="ultratube-settings-title">Settings</div>
+    <div class="ultratube-settings-row">
+      <label for="utSettingRegion">Region</label>
+      <select id="utSettingRegion" aria-label="Search region">
+        <option value="US">US</option>
+        <option value="GB">GB</option>
+        <option value="AU">AU</option>
+        <option value="CA">CA</option>
+        <option value="IN">IN</option>
+        <option value="JP">JP</option>
+        <option value="DE">DE</option>
+      </select>
+    </div>
+    <div class="ultratube-settings-row">
+      <label for="utSettingOrder">Sort by</label>
+      <select id="utSettingOrder" aria-label="Sort order">
+        <option value="relevance">Relevance</option>
+        <option value="date">Date</option>
+        <option value="viewCount">Views</option>
+        <option value="rating">Rating</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── Main content ──────────────────────────── -->
+  <main class="ultratube-main" id="utMain" role="main">
+
+    <!-- Home / search view -->
+    <section id="utHomeView" aria-label="Video feed">
+      <div class="ultratube-grid" id="utGrid" aria-live="polite" aria-label="Videos"></div>
+      <div class="ultratube-pagination" id="utPagination" aria-label="Pagination">
+        <button
+          class="ultratube-page-btn"
+          id="utPrevBtn"
+          type="button"
+          aria-label="Previous page"
+          disabled
+        >&#8592;</button>
+        <span class="ultratube-page-label" id="utPageLabel" aria-live="polite"></span>
+        <button
+          class="ultratube-page-btn"
+          id="utNextBtn"
+          type="button"
+          aria-label="Next page"
+          disabled
+        >&#8594;</button>
+      </div>
+    </section>
+
+    <!-- Channel view -->
+    <section id="utChannelView" hidden aria-label="Channel page">
+      <button class="ultratube-back-btn" id="utChannelBack" type="button" aria-label="Back to results">
+        &#8592; Back
+      </button>
+      <div class="ultratube-channel-header" id="utChannelHeader"></div>
+      <div class="ultratube-grid" id="utChannelGrid" aria-live="polite" aria-label="Channel videos"></div>
+      <div class="ultratube-pagination" id="utChannelPagination" aria-label="Channel pagination">
+        <button
+          class="ultratube-page-btn"
+          id="utChPrevBtn"
+          type="button"
+          aria-label="Previous page"
+          disabled
+        >&#8592;</button>
+        <span class="ultratube-page-label" id="utChPageLabel" aria-live="polite"></span>
+        <button
+          class="ultratube-page-btn"
+          id="utChNextBtn"
+          type="button"
+          aria-label="Next page"
+          disabled
+        >&#8594;</button>
+      </div>
+    </section>
+
+    <!-- Playlist view -->
+    <section id="utPlaylistView" hidden aria-label="Playlist">
+      <div class="ultratube-section-title">Playlist</div>
+      <div id="utPlaylistList" class="ultratube-list"></div>
+    </section>
+
+    <!-- History view -->
+    <section id="utHistoryView" hidden aria-label="Watch history">
+      <div class="ultratube-section-title">History</div>
+      <div id="utHistoryList" class="ultratube-list"></div>
+    </section>
+
+  </main>
+
+  <!-- ── Watch modal ───────────────────────────── -->
+  <div
+    class="ultratube-modal-overlay"
+    id="utWatchModal"
+    hidden
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="utModalTitle"
+  >
+    <div class="ultratube-modal-box">
+      <div class="ultratube-modal-header">
+        <span class="ultratube-modal-title" id="utModalTitle"></span>
+        <button class="ultratube-modal-close" id="utModalClose" type="button" aria-label="Close video">&#xd7;</button>
+      </div>
+      <div class="ultratube-iframe-wrap" id="utIframeWrap"></div>
+    </div>
+  </div>
+
+  <!-- ── Shorts overlay ────────────────────────── -->
+  <div
+    class="ultratube-shorts-overlay"
+    id="utShortsOverlay"
+    hidden
+    role="region"
+    aria-label="Shorts"
+  >
+    <button class="ultratube-shorts-close" id="utShortsClose" type="button" aria-label="Close Shorts">&#xd7;</button>
+    <!-- slides injected by JS -->
+  </div>
+
+  <!-- ── Bottom navigation ─────────────────────── -->
+  <nav class="ultratube-bottom-nav" aria-label="Bottom navigation">
+    <button class="ultratube-nav-btn" id="utNavHome" type="button" data-view="home" aria-current="page">
+      <span class="ultratube-nav-icon" aria-hidden="true">&#127968;</span>
+      <span>Home</span>
+    </button>
+    <button class="ultratube-nav-btn" id="utNavShorts" type="button" data-view="shorts">
+      <span class="ultratube-nav-icon" aria-hidden="true">&#9889;</span>
+      <span>Shorts</span>
+    </button>
+    <button class="ultratube-nav-btn" id="utNavPlaylist" type="button" data-view="playlist">
+      <span class="ultratube-nav-icon" aria-hidden="true">&#128195;</span>
+      <span>Playlist</span>
+    </button>
+    <button class="ultratube-nav-btn" id="utNavHistory" type="button" data-view="history">
+      <span class="ultratube-nav-icon" aria-hidden="true">&#128336;</span>
+      <span>History</span>
+    </button>
+  </nav>
+
+</div><!-- /.ultratube-app -->
+
+<script src="script.js"></script>
+</body>
+</html>

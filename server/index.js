@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const https = require("https");
 const express = require("express");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
@@ -56,6 +57,10 @@ const CONFIG = {
   modPinLockSeconds: 30 * 60,
 
   usernameCooldownDays: 14,
+
+  // Ultratube: RapidAPI YouTube key (optional; Ultratube API returns 503 if absent)
+  rapidApiYouTubeKey: envStr("RAPIDAPI_YOUTUBE_KEY", ""),
+  youtubeApiTimeoutMs: parseInt(envStr("YOUTUBE_API_TIMEOUT_MS", "10000"), 10) || 10000,
 };
 
 const COOKIE_USER = "divine_access";
@@ -66,6 +71,8 @@ const COOKIE_MOD = "dv_mod";
 const ownerOnceTokens = new Map();
 const modSessions = new Map(); // token -> expiresAtMs
 let currentModPin = CONFIG.modPin; // resets to env on server restart
+
+const YT_MAX_QUERY_LENGTH = 200;
 
 // -----------------------
 // Helpers
@@ -2586,6 +2593,233 @@ app.get("/api/owner/security/logins", async (req, res) => {
     })) });
   } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
 });
+
+// -----------------------
+// Ultratube — RapidAPI YouTube proxy
+// -----------------------
+
+/** Simple per-user sliding-window rate limiter for Ultratube API endpoints.
+ *  Allows up to maxHits requests per windowMs per userId. */
+const _ytRateLimitMap = new Map(); // userId -> [timestampMs, ...]
+function ytRateLimit(userId, maxHits = 20, windowMs = 60000) {
+  const now = Date.now();
+  const hits = (_ytRateLimitMap.get(userId) || []).filter((t) => now - t < windowMs);
+  if (hits.length >= maxHits) return false;
+  hits.push(now);
+  _ytRateLimitMap.set(userId, hits);
+  return true;
+}
+
+/** Middleware: enforce Ultratube API rate limit (20 req/min per user). */
+function ytRateLimitMiddleware(req, res, next) {
+  const userId = req.user && req.user.id;
+  if (!userId || !ytRateLimit(String(userId))) {
+    return res.status(429).json({ ok: false, error: "Too many requests" });
+  }
+  return next();
+}
+
+/** Make a GET request to the RapidAPI YouTube v3 endpoint. Returns parsed JSON. */
+function ytApiRequest(pathname, qs) {
+  return new Promise((resolve, reject) => {
+    const key = CONFIG.rapidApiYouTubeKey;
+    if (!key) return reject(new Error("YouTube API key not configured"));
+    const query = new URLSearchParams(qs).toString();
+    const options = {
+      hostname: "youtube-v31.p.rapidapi.com",
+      path: pathname + (query ? "?" + query : ""),
+      method: "GET",
+      headers: {
+        "X-RapidAPI-Key": key,
+        "X-RapidAPI-Host": "youtube-v31.p.rapidapi.com",
+      },
+    };
+    const req = https.request(options, (resp) => {
+      let raw = "";
+      resp.on("data", (chunk) => { raw += chunk; });
+      resp.on("end", () => {
+        try { resolve(JSON.parse(raw)); }
+        catch { reject(new Error("Invalid JSON from YouTube API")); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(CONFIG.youtubeApiTimeoutMs, () => { req.destroy(new Error("YouTube API timeout")); });
+    req.end();
+  });
+}
+
+/** Normalise a raw YouTube API search item into a clean video object. */
+function normaliseVideoItem(item) {
+  const snippet = item.snippet || {};
+  const thumb =
+    (snippet.thumbnails && (
+      (snippet.thumbnails.high && snippet.thumbnails.high.url) ||
+      (snippet.thumbnails.medium && snippet.thumbnails.medium.url) ||
+      (snippet.thumbnails.default && snippet.thumbnails.default.url)
+    )) || "";
+  const videoId = (item.id && item.id.videoId) || item.id || "";
+  return {
+    id: String(videoId),
+    title: String(snippet.title || ""),
+    channel: String(snippet.channelTitle || ""),
+    thumbnail: thumb,
+    publishedAt: snippet.publishedAt || "",
+    duration: "",
+    viewCount: "",
+  };
+}
+
+/** Middleware: require a valid user JWT cookie for Ultratube API endpoints. */
+async function requireUserAuth(req, res, next) {
+  try {
+    const user = await verifyUserFromRequest(req);
+    if (!user) return res.status(401).json({ ok: false, error: "Authentication required" });
+    req.user = user;
+    return next();
+  } catch {
+    return res.status(401).json({ ok: false, error: "Authentication required" });
+  }
+}
+
+// GET /api/ultratube/search?query=&pageToken=&region=&order=
+app.get("/api/ultratube/search", requireUserAuth, ytRateLimitMiddleware, async (req, res) => {
+  try {
+    if (!CONFIG.rapidApiYouTubeKey) {
+      return res.status(503).json({ ok: false, error: "YouTube API not configured" });
+    }
+    const query = String(req.query.query || "").trim().slice(0, YT_MAX_QUERY_LENGTH);
+    if (!query) return res.status(400).json({ ok: false, error: "query is required" });
+
+    const qs = {
+      part: "snippet",
+      q: query,
+      type: "video",
+      maxResults: "6",
+      regionCode: String(req.query.region || "US").slice(0, 2).toUpperCase(),
+      order: ["relevance", "date", "viewCount", "rating"].includes(req.query.order)
+        ? req.query.order : "relevance",
+    };
+    if (req.query.pageToken) qs.pageToken = String(req.query.pageToken).slice(0, YT_MAX_QUERY_LENGTH);
+
+    const data = await ytApiRequest("/search", qs);
+    const items = (data.items || [])
+      .filter((item) => item.id && item.id.videoId)
+      .map(normaliseVideoItem);
+
+    return res.json({
+      ok: true,
+      items,
+      nextPageToken: data.nextPageToken || null,
+      prevPageToken: data.prevPageToken || null,
+    });
+  } catch (err) {
+    console.error("Ultratube /search error:", err.message);
+    return res.status(500).json({ ok: false, error: "YouTube API error" });
+  }
+});
+
+// GET /api/ultratube/channelSearch?query=
+app.get("/api/ultratube/channelSearch", requireUserAuth, ytRateLimitMiddleware, async (req, res) => {
+  try {
+    if (!CONFIG.rapidApiYouTubeKey) {
+      return res.status(503).json({ ok: false, error: "YouTube API not configured" });
+    }
+    const query = String(req.query.query || "").trim().slice(0, YT_MAX_QUERY_LENGTH);
+    if (!query) return res.status(400).json({ ok: false, error: "query is required" });
+
+    const data = await ytApiRequest("/search", {
+      part: "snippet",
+      q: query,
+      type: "channel",
+      maxResults: "5",
+    });
+
+    const items = (data.items || [])
+      .filter((item) => item.id && item.id.channelId)
+      .map((item) => {
+        const snippet = item.snippet || {};
+        const thumb =
+          (snippet.thumbnails && (
+            (snippet.thumbnails.high && snippet.thumbnails.high.url) ||
+            (snippet.thumbnails.default && snippet.thumbnails.default.url)
+          )) || "";
+        return {
+          id: String(item.id.channelId),
+          title: String(snippet.title || ""),
+          description: String(snippet.description || ""),
+          thumbnail: thumb,
+        };
+      });
+
+    return res.json({ ok: true, items });
+  } catch (err) {
+    console.error("Ultratube /channelSearch error:", err.message);
+    return res.status(500).json({ ok: false, error: "YouTube API error" });
+  }
+});
+
+// GET /api/ultratube/channel/:id?pageToken=&region=
+app.get("/api/ultratube/channel/:id", requireUserAuth, ytRateLimitMiddleware, async (req, res) => {
+  try {
+    if (!CONFIG.rapidApiYouTubeKey) {
+      return res.status(503).json({ ok: false, error: "YouTube API not configured" });
+    }
+    const channelId = String(req.params.id || "").trim().slice(0, 100);
+    if (!channelId) return res.status(400).json({ ok: false, error: "Channel ID is required" });
+
+    // Fetch channel metadata and videos in parallel
+    const [channelData, videosData] = await Promise.all([
+      ytApiRequest("/channels", {
+        part: "snippet,statistics",
+        id: channelId,
+      }),
+      (async () => {
+        const vqs = {
+          part: "snippet",
+          channelId,
+          type: "video",
+          maxResults: "6",
+          order: "date",
+          regionCode: String(req.query.region || "US").slice(0, 2).toUpperCase(),
+        };
+        if (req.query.pageToken) vqs.pageToken = String(req.query.pageToken).slice(0, YT_MAX_QUERY_LENGTH);
+        return ytApiRequest("/search", vqs);
+      })(),
+    ]);
+
+    const chItem = (channelData.items || [])[0] || {};
+    const snippet = chItem.snippet || {};
+    const stats = chItem.statistics || {};
+    const thumb =
+      (snippet.thumbnails && (
+        (snippet.thumbnails.high && snippet.thumbnails.high.url) ||
+        (snippet.thumbnails.default && snippet.thumbnails.default.url)
+      )) || "";
+
+    const channel = {
+      id: channelId,
+      title: String(snippet.title || channelId),
+      description: String((snippet.description || "").slice(0, 200)),
+      thumbnail: thumb,
+      subscriberCount: stats.subscriberCount || "",
+    };
+
+    const videos = (videosData.items || [])
+      .filter((item) => item.id && item.id.videoId)
+      .map(normaliseVideoItem);
+
+    return res.json({
+      ok: true,
+      channel,
+      videos,
+      nextPageToken: videosData.nextPageToken || null,
+    });
+  } catch (err) {
+    console.error("Ultratube /channel/:id error:", err.message);
+    return res.status(500).json({ ok: false, error: "YouTube API error" });
+  }
+});
+
 app.use("/divine", async (req, res, next) => {
   try {
     const p = req.path || "/";
@@ -2682,6 +2916,11 @@ app.get("/divine/profile/", (req, res) => sendRepoFile(res, "divine/profile/inde
 
 // Public user profile view
 app.get("/divine/u/:username", (req, res) => sendRepoFile(res, "divine/user/index.html"));
+
+// Ultratube page routes
+app.get("/divine/ultratube", (req, res) => res.redirect(302, "/divine/ultratube/"));
+app.get("/divine/ultratube/", (req, res) => sendRepoFile(res, "divine/ultratube/index.html"));
+app.get("/divine/ultratube/channel/:id", (req, res) => sendRepoFile(res, "divine/ultratube/index.html"));
 
 // -----------------------
 // Static serving
