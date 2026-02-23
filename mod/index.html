@@ -3,163 +3,90 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Mod Panel — Divine</title>
+  <title>Mod Panel — Authentication</title>
   <link rel="stylesheet" href="/mod/styles.css" />
+  <style>
+    html, body { height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .gate-wrap { position: relative; z-index: 1; width: 100%; max-width: 400px; padding: 24px; }
+    .gate-card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 20px;
+      padding: 36px 32px 28px;
+      box-shadow: 0 22px 70px rgba(0,0,0,0.62);
+    }
+    .gate-top { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
+    .gate-icon { font-size: 2.2rem; }
+    .gate-title { font-size: 1.25rem; font-weight: 700; }
+    .gate-sub { font-size: 0.82rem; opacity: 0.6; margin-top: 2px; }
+    .gate-field { margin-bottom: 18px; }
+    .gate-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .gate-actions .btn { flex: 1; }
+  </style>
 </head>
 <body>
   <div class="bg" aria-hidden="true"></div>
   <div class="noise" aria-hidden="true"></div>
-
-  <div class="app" id="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo" aria-hidden="true">🛡️</div>
-        <div class="brandText">
-          <div class="brandTitle">Mod Panel</div>
-          <div class="brandSub" id="statusText">Locked</div>
-        </div>
-      </div>
-      <div class="topActions">
-        <button class="btn ghost" id="refreshBtn" type="button">Refresh</button>
-        <button class="btn ghost" id="homeBtn" type="button">Home</button>
-      </div>
-    </header>
-
-    <div class="layout">
-      <aside class="sidebar">
-        <nav class="nav">
-          <button class="navItem active" data-view="active-users" type="button">
-            <span class="navIcon">🟢</span><span>Active Users</span>
-          </button>
-          <button class="navItem" data-view="all-users" type="button">
-            <span class="navIcon">👥</span><span>All Users</span>
-          </button>
-        </nav>
-        <div class="sideFoot">
-          <div class="mini muted">Session expires in 30 min.</div>
-          <button id="relockBtn" class="btn ghost small" type="button">Lock</button>
-        </div>
-      </aside>
-
-      <main class="main">
-        <!-- ACTIVE USERS -->
-        <section class="view active" id="view-active-users">
-          <div class="hgroup">
-            <h1>Active Users</h1>
-            <p class="muted">Users seen in the last 10 minutes.</p>
-          </div>
-          <div class="panel">
-            <div class="panelHead">
-              <button class="btn primary" id="loadActiveBtn" type="button">Load</button>
-            </div>
-            <div class="tableWrap">
-              <table class="table">
-                <thead><tr><th>User</th><th>Last Seen</th><th>IP</th><th style="text-align:right">Actions</th></tr></thead>
-                <tbody id="activeBody"><tr><td colspan="4" class="muted">Not loaded.</td></tr></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- ALL USERS -->
-        <section class="view" id="view-all-users">
-          <div class="hgroup">
-            <h1>All Users</h1>
-            <p class="muted">Full user list. Actions depend on what the owner has enabled.</p>
-          </div>
-          <div class="panel">
-            <div class="panelHead">
-              <div class="row">
-                <input id="userSearch" class="input" placeholder="Search username…" autocomplete="off" />
-                <button class="btn primary" id="loadUsersBtn" type="button">Load</button>
-              </div>
-            </div>
-            <div class="tableWrap">
-              <table class="table">
-                <thead><tr><th>User</th><th>Status</th><th>Last Seen</th><th style="text-align:right">Actions</th></tr></thead>
-                <tbody id="usersBody"><tr><td colspan="4" class="muted">Not loaded.</td></tr></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
-  </div>
-
-  <!-- PIN Overlay -->
-  <div class="overlay" id="pinOverlay" role="dialog" aria-modal="true">
-    <div class="pinCard">
-      <div class="pinTop">
-        <div class="pinIcon" aria-hidden="true">🛡️</div>
+  <div class="gate-wrap">
+    <div class="gate-card" role="main">
+      <div class="gate-top">
+        <div class="gate-icon" aria-hidden="true">🛡️</div>
         <div>
-          <div class="pinTitle">Mod Verification</div>
-          <div class="pinText muted">Enter MOD PIN to unlock.</div>
+          <div class="gate-title">Authentication Required</div>
+          <div class="gate-sub">Enter your Mod PIN to access the panel.</div>
         </div>
       </div>
-      <div class="pinField">
+      <div class="gate-field">
         <label class="label" for="modPin">MOD PIN</label>
-        <input id="modPin" class="input" type="password" autocomplete="off" placeholder="••••••••" />
+        <input id="modPin" class="input" type="password" autocomplete="off" placeholder="••••••••" autofocus />
       </div>
-      <div class="row">
-        <button id="pinEnterBtn" class="btn primary" type="button">Enter</button>
-        <button id="pinExitBtn" class="btn ghost" type="button">Exit</button>
+      <div class="gate-actions">
+        <button id="enterBtn" class="btn primary" type="button">Enter</button>
+        <button id="backBtn" class="btn ghost" type="button">Back</button>
       </div>
-      <div class="msg" id="pinMsg" role="status" aria-live="polite"></div>
+      <div class="msg" id="gateMsg" role="status" aria-live="polite" style="margin-top:12px"></div>
     </div>
   </div>
+  <script>
+    (function () {
+      const pinInput = document.getElementById("modPin");
+      const enterBtn = document.getElementById("enterBtn");
+      const backBtn  = document.getElementById("backBtn");
+      const gateMsg  = document.getElementById("gateMsg");
 
-  <!-- Ban Modal -->
-  <dialog class="modal" id="banModal">
-    <form method="dialog" class="modalCard">
-      <div class="modalHead">
-        <div><div class="modalTitle">Ban User</div><div class="mini muted">e.g. 1h, 3d, permanent</div></div>
-        <button class="x" value="cancel" aria-label="Close">✕</button>
-      </div>
-      <div class="form">
-        <div class="formRow">
-          <label class="label">Username</label>
-          <input id="banUser" class="input" placeholder="Username" autocomplete="off" />
-        </div>
-        <div class="formRow">
-          <label class="label">Duration</label>
-          <input id="banDuration" class="input" placeholder="1h, 3d, permanent" autocomplete="off" />
-        </div>
-        <div class="formRow">
-          <label class="label">Reason</label>
-          <textarea id="banReason" class="textarea" placeholder="Reason…" maxlength="300"></textarea>
-        </div>
-        <div class="formRow">
-          <button id="banSubmitBtn" class="btn danger" type="button">Ban</button>
-          <button class="btn ghost" value="cancel" type="submit">Cancel</button>
-        </div>
-        <div class="msg" id="banMsg"></div>
-      </div>
-    </form>
-  </dialog>
+      function setMsg(text, kind) {
+        gateMsg.textContent = text || "";
+        gateMsg.className = "msg" + (kind ? " " + kind : "");
+      }
 
-  <!-- Redirect Modal -->
-  <dialog class="modal" id="redirectModal">
-    <form method="dialog" class="modalCard">
-      <div class="modalHead">
-        <div><div class="modalTitle">Redirect User</div><div class="mini muted">Site paths only (e.g. /divine/)</div></div>
-        <button class="x" value="cancel" aria-label="Close">✕</button>
-      </div>
-      <div class="form">
-        <div class="formRow">
-          <label class="label">Path</label>
-          <input id="redirectPath" class="input" placeholder="/divine/" autocomplete="off" />
-        </div>
-        <div class="formRow">
-          <button id="redirectSubmitBtn" class="btn primary" type="button">Set Redirect</button>
-          <button class="btn ghost" value="cancel" type="submit">Cancel</button>
-        </div>
-        <div class="msg" id="redirectMsg"></div>
-      </div>
-    </form>
-  </dialog>
+      async function submit() {
+        const pin = pinInput.value.trim();
+        if (!pin) { setMsg("Enter the mod PIN.", "err"); return; }
+        enterBtn.disabled = true;
+        setMsg("Verifying\u2026", "");
+        try {
+          const res = await fetch("/mod/pin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pinAttempt: pin })
+          });
+          const data = await res.json().catch(function() { return {}; });
+          if (!res.ok || !data.ok) {
+            setMsg(data.error || "Denied", "err");
+            return;
+          }
+          window.location.href = "/mod/dashboard";
+        } catch (e) {
+          setMsg("Request failed.", "err");
+        } finally {
+          enterBtn.disabled = false;
+        }
+      }
 
-  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-
-  <script src="/mod/script.js"></script>
+      enterBtn.addEventListener("click", submit);
+      pinInput.addEventListener("keydown", function(e) { if (e.key === "Enter") submit(); });
+      backBtn.addEventListener("click", function() { window.location.href = "/"; });
+    })();
+  </script>
 </body>
 </html>
