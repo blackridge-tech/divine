@@ -2586,6 +2586,12 @@ app.get("/api/owner/security/logins", async (req, res) => {
     })) });
   } catch { return res.status(500).json({ ok: false, error: "Server error" }); }
 });
+
+// -----------------------
+// Supertube / UltraTube API
+// -----------------------
+app.use("/api/supertube", require("./routes/supertube"));
+
 app.use("/divine", async (req, res, next) => {
   try {
     const p = req.path || "/";

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UltraTube</title>
+  <link rel="stylesheet" href="/divine/supertube/styles.css" />
+</head>
+<body>
+<div class="supertube-root" id="supertubeRoot">
+
+  <!-- ===== TOPBAR ===== -->
+  <header class="st-topbar" role="banner">
+    <a class="st-logo" href="#" id="stLogoBtn" aria-label="UltraTube home">
+      <img src="/divine/supertube/ultratube.png" alt="UltraTube" class="st-logo-img" />
+      <span class="st-logo-text">UltraTube</span>
+    </a>
+    <form class="st-search-form" id="stSearchForm" role="search" aria-label="Search videos">
+      <input
+        class="st-search-input"
+        id="stSearchInput"
+        type="search"
+        placeholder="Search videos or @channel…"
+        autocomplete="off"
+        aria-label="Search"
+        maxlength="256"
+      />
+      <button class="st-search-btn" type="submit" aria-label="Search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+    </form>
+    <button class="st-settings-btn" id="stSettingsBtn" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </header>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="st-main" id="stMain">
+
+    <!-- Home / Search video grid -->
+    <section class="st-view st-view--active" id="stViewHome" aria-label="Video feed">
+      <div class="st-section-title" id="stSectionTitle">Trending</div>
+      <div class="st-grid" id="stGrid" role="list">
+        <!-- Video cards injected by script.js -->
+      </div>
+      <div class="st-empty" id="stEmpty" hidden aria-live="polite">No videos found.</div>
+      <div class="st-loading" id="stLoading" hidden aria-live="polite" aria-label="Loading…">
+        <span class="st-spinner" aria-hidden="true"></span> Loading…
+      </div>
+      <nav class="st-pagination" id="stPagination" aria-label="Pagination">
+        <button class="st-page-btn" id="stPrevBtn" type="button" aria-label="Previous page" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+          Prev
+        </button>
+        <span class="st-page-info" id="stPageInfo">Page 1</span>
+        <button class="st-page-btn" id="stNextBtn" type="button" aria-label="Next page">
+          Next
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </nav>
+    </section>
+
+    <!-- Playlist view -->
+    <section class="st-view" id="stViewPlaylist" aria-label="Playlist" hidden>
+      <div class="st-section-title">Playlist</div>
+      <div class="st-grid" id="stPlaylistGrid" role="list"></div>
+      <div class="st-empty" id="stPlaylistEmpty" hidden>No playlist loaded.</div>
+      <div class="st-loading" id="stPlaylistLoading" hidden aria-live="polite" aria-label="Loading…">
+        <span class="st-spinner" aria-hidden="true"></span> Loading…
+      </div>
+      <nav class="st-pagination" id="stPlaylistPagination" aria-label="Pagination">
+        <button class="st-page-btn" id="stPlaylistPrev" type="button" aria-label="Previous page" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+          Prev
+        </button>
+        <span class="st-page-info" id="stPlaylistPageInfo">Page 1</span>
+        <button class="st-page-btn" id="stPlaylistNext" type="button" aria-label="Next page">
+          Next
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </nav>
+    </section>
+
+    <!-- History view -->
+    <section class="st-view" id="stViewHistory" aria-label="Watch history" hidden>
+      <div class="st-section-title">History</div>
+      <div class="st-grid" id="stHistoryGrid" role="list"></div>
+      <div class="st-empty" id="stHistoryEmpty" hidden>No watch history yet.</div>
+    </section>
+
+  </main>
+
+  <!-- ===== BOTTOM NAV ===== -->
+  <nav class="st-bottom-nav" role="navigation" aria-label="Main navigation">
+    <button class="st-nav-btn st-nav-btn--active" id="stNavHome" data-view="home" type="button" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="st-nav-btn" id="stNavShorts" data-view="shorts" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="9" x2="12" y2="15"/><polyline points="9 12 12 9 15 12"/></svg>
+      <span>Shorts</span>
+    </button>
+    <button class="st-nav-btn" id="stNavPlaylist" data-view="playlist" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>Playlist</span>
+    </button>
+    <button class="st-nav-btn" id="stNavHistory" data-view="history" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+      <span>History</span>
+    </button>
+  </nav>
+
+  <!-- ===== SHORTS OVERLAY ===== -->
+  <div class="st-shorts-overlay" id="stShortsOverlay" hidden role="dialog" aria-modal="true" aria-label="Shorts">
+    <button class="st-shorts-close" id="stShortsClose" type="button" aria-label="Close Shorts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="24" height="24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="st-shorts-feed" id="stShortsFeed">
+      <!-- Short items injected by script.js -->
+    </div>
+    <div class="st-loading st-shorts-loading" id="stShortsLoading" hidden aria-live="polite" aria-label="Loading shorts…">
+      <span class="st-spinner" aria-hidden="true"></span>
+    </div>
+  </div>
+
+  <!-- ===== WATCH MODAL ===== -->
+  <div class="st-watch-modal" id="stWatchModal" hidden role="dialog" aria-modal="true" aria-label="Watch video">
+    <div class="st-watch-backdrop" id="stWatchBackdrop"></div>
+    <div class="st-watch-card">
+      <button class="st-watch-close" id="stWatchClose" type="button" aria-label="Close video">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="st-watch-player-wrap">
+        <iframe
+          id="stWatchFrame"
+          class="st-watch-frame"
+          src=""
+          allow="autoplay; encrypted-media; picture-in-picture"
+          allowfullscreen
+          title="Video player"
+        ></iframe>
+      </div>
+      <div class="st-watch-info">
+        <h2 class="st-watch-title" id="stWatchTitle"></h2>
+        <div class="st-watch-meta" id="stWatchMeta"></div>
+        <div class="st-watch-desc" id="stWatchDesc"></div>
+        <div class="st-watch-comments-label">Comments</div>
+        <div class="st-watch-comments" id="stWatchComments" aria-label="Comments"></div>
+        <div class="st-loading" id="stCommentsLoading" hidden aria-live="polite">
+          <span class="st-spinner" aria-hidden="true"></span> Loading comments…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS PANEL ===== -->
+  <div class="st-settings-panel" id="stSettingsPanel" hidden role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="st-settings-backdrop" id="stSettingsBackdrop"></div>
+    <div class="st-settings-card">
+      <div class="st-settings-header">
+        <h3>Settings</h3>
+        <button class="st-watch-close" id="stSettingsClose" type="button" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="st-settings-body">
+        <label class="st-settings-label">
+          Page size
+          <input type="number" id="stSettingsPageSize" min="1" max="50" value="6" class="st-settings-input" />
+        </label>
+        <label class="st-settings-label">
+          Playlist ID (for Playlist tab)
+          <input type="text" id="stSettingsPlaylistId" placeholder="PLxxxxxxxx" class="st-settings-input" maxlength="128" />
+        </label>
+        <button class="st-settings-save" id="stSettingsSave" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .supertube-root -->
+<script src="/divine/supertube/script.js"></script>
+</body>
+</html>
