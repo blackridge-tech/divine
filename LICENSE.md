@@ -1,139 +1,193 @@
-# **Divine Universal Access & Use Agreement**
+BLACKRIDGE NETWORK
+UNIVERSAL SOFTWARE LICENSE AGREEMENT (USLA)
 
-**Last Updated:** [1/24/25]
+Last Updated: February 27, 2026
+Effective Date: February 27, 2026
 
-## **1. Scope of This Agreement**  
-This Agreement governs all access to and use of the website, platform, services, applications, tools, features, source code, and any related materials (“Services”).  
-The Services may include, but are not limited to:  
-- Interactive applications  
-- Games or game‑like experiences  
-- Embedded or integrated browsing tools  
-- Audio utilities or soundboards  
-- AI‑powered features or automated systems  
-- Chat systems, messaging systems, or direct‑message features  
-- Portals or links to external websites  
-- Any additional or future features added by the owner  
+This Universal Software License Agreement (“Agreement”) is a legally binding agreement between you (“User,” “You,” or “Your”) and Blackridge Network (“Blackridge,” “Company,” “We,” “Us,” or “Our”), governing your access to and use of all software, operating systems, firmware, hardware-integrated software, cloud services, gaming platforms, development tools, repositories, websites, and related services provided by Blackridge Network.
 
-By accessing any part of the Services — including the homepage, login page, or password‑protected areas — you agree to be bound by this Agreement.
+By downloading, installing, accessing, compiling, executing, cloning, forking, viewing, or otherwise interacting with any Blackridge software or service, you agree to be bound by this Agreement. If you do not agree, you must immediately cease all use.
 
----
+1. DEFINITIONS
 
-## **2. Ownership and Intellectual Property**  
-All code, assets, text, graphics, logic, data structures, and related materials (“Content”) are the exclusive property of the owner (“Owner”).  
-- Access does **not** grant ownership or any rights beyond those explicitly stated.  
-- All rights not expressly granted are reserved.
+1.1 “Software” means all source code, object code, binaries, firmware, APIs, SDKs, libraries, scripts, repositories (including GitHub projects), operating systems, applications, gaming hubs, hosting platforms, web services, cloud infrastructure, and any updates or derivatives developed by Blackridge.
 
-### **2.1 Viewing Source Code**  
-You may view or inspect source code **only to the extent the platform allows**, such as through browser developer tools or public interfaces.
+1.2 “Hardware” includes any physical products developed by Blackridge, including but not limited to single-board computers and embedded systems.
 
-### **2.2 Prohibited Actions**  
-Unless you have **explicit written permission** from the Owner, you may **NOT**:  
-- Fork, clone, copy, mirror, or duplicate any repository  
-- Modify, alter, or create derivative works  
-- Redistribute, publish, or share any part of the code or assets  
-- Reverse engineer, decompile, or attempt to extract underlying logic  
-- Bypass access controls, privacy settings, or security mechanisms  
-- Use the Content in any other project, platform, or service  
+1.3 “Services” means any hosted, online, or cloud-based functionality provided by Blackridge.
 
-If the repository is private on GitHub or any other platform, you agree not to attempt to access, fork, or replicate it through any means.
+1.4 “Intellectual Property” includes all copyrights, trademarks, patents, trade secrets, proprietary algorithms, and confidential information.
 
----
+2. LICENSE GRANT
 
-## **3. Access Restrictions**  
-Access to the Services is a **revocable privilege**, not a right.  
-The Owner may:  
-- Restrict access  
-- Revoke access  
-- Modify access levels  
-- Terminate access entirely  
-at any time, for any reason, with or without notice.
+2.1 Limited License. Blackridge grants you a limited, non-exclusive, non-transferable, non-sublicensable, revocable license to access and use the Software strictly for personal, non-commercial viewing and authorized use purposes only.
 
-If the homepage or any part of the Services requires a password, entering that password constitutes acceptance of this Agreement.
+2.2 No Ownership Transfer. This Agreement does not grant ownership of any Software, Services, or Intellectual Property. All rights remain exclusively with Blackridge.
 
----
+2.3 Reservation of Rights. All rights not expressly granted are reserved by Blackridge.
 
-## **4. Service‑Specific Terms**
+3. STRICT PROHIBITIONS
 
-### **4.1 Games and Interactive Features**  
-You may use interactive features for personal, non‑commercial purposes only.  
-You may not automate gameplay, exploit bugs, or attempt to manipulate system behavior.
+You expressly agree that you SHALL NOT:
 
-### **4.2 Browser or Embedded Browsing Tools**  
-Any embedded browsing or sandbox tools are provided “as is.”  
-You are responsible for your own browsing activity, including any external content you choose to access.
+3.1 Copy, reproduce, duplicate, modify, translate, adapt, or create derivative works.
 
-### **4.3 Soundboard or Audio Tools**  
-Audio tools may produce or play sounds.  
-You are responsible for ensuring your use complies with local laws, noise regulations, and personal safety.
+3.2 Reverse engineer, decompile, disassemble, attempt to derive source code, analyze structure, or bypass protections.
 
-### **4.4 AI‑Powered Features**  
-AI features may generate text, responses, or other outputs.  
-You agree that:  
-- Outputs may be inaccurate, incomplete, or unpredictable  
-- You are solely responsible for how you use or interpret AI outputs  
-- The Owner is not liable for any consequences of AI‑generated content  
+3.3 Clone, fork, mirror, scrape, archive, or replicate any repository or Software.
 
-### **4.5 Chat Systems and Direct Messaging**  
-Messaging features may allow communication with others or with automated systems.  
-You agree not to:  
-- Harass, threaten, or abuse others  
-- Share illegal, harmful, or malicious content  
-- Attempt to access messages not intended for you  
-- Exploit or manipulate messaging systems  
+3.4 Redistribute, resell, lease, sublicense, rent, host, or commercially exploit the Software.
 
-The Owner may monitor, restrict, or remove messages at their discretion.
+3.5 Use the Software for competitive analysis or to build a competing product.
 
-### **4.6 Portals to External Websites**  
-Links or portals to external sites are provided for convenience.  
-The Owner does not control and is not responsible for external content, policies, or actions.
+3.6 Remove, alter, or obscure proprietary notices.
 
----
+3.7 Circumvent authentication, DRM, licensing mechanisms, or usage restrictions.
 
-## **5. Liability Disclaimer**  
-To the fullest extent permitted by law:  
-- The Services are provided **“as is” and “as available.”**  
-- The Owner makes **no warranties** of any kind.  
-- The Owner is **not responsible** for any harm, damage, loss, or consequence arising from:  
-  - Use or misuse of the Services  
-  - Errors, bugs, glitches, or outages  
-  - AI outputs or automated responses  
-  - External websites accessed through the platform  
-  - User interactions, messages, or communications  
-  - Any action you take based on information from the Services  
+3.8 Use the Software for unlawful, abusive, malicious, or exploitative purposes.
 
-You assume **full responsibility** for your actions and for any risks associated with using the Services.
+3.9 Deploy or integrate Blackridge Software into any production environment without written authorization.
 
----
+3.10 Use automated systems (bots, crawlers, scrapers) to extract data.
 
-## **6. Modifications to Code, Features, or Terms**  
-The Owner may modify, update, remove, or replace:  
-- Code  
-- Features  
-- Services  
-- Repositories  
-- This Agreement  
-at any time, without notice.
+4. OPEN REPOSITORIES DISCLAIMER
 
-By continuing to access or use the Services after any modification, you agree to the updated terms automatically.
+If any Blackridge repository is publicly viewable (e.g., on GitHub), such visibility does NOT constitute permission to:
 
----
+Clone or fork
 
-## **7. Enforcement and Legal Action**  
-Unauthorized use, copying, distribution, reverse engineering, or violation of this Agreement may result in:  
-- Immediate termination of access  
-- Reporting to hosting platforms (e.g., GitHub)  
-- Legal action to the fullest extent permitted by law  
+Modify
 
-You agree to comply with all applicable laws and to indemnify the Owner against any claims arising from your use of the Services.
+Redistribute
 
----
+Compile for deployment
 
-## **8. Acceptance of Terms**  
-By accessing any part of the Services — including the homepage, password entry screen, or any feature — you acknowledge that you:  
-- Have read this Agreement  
-- Understand it  
-- Agree to be bound by it  
-- Accept that the Owner may modify it at any time  
-- Accept full responsibility for your actions while using the Services  
+Commercialize
 
-If you do not agree, you must immediately cease all access and use.
+Public visibility does not waive intellectual property rights.
+
+5. OPERATING SYSTEM & FIRMWARE TERMS
+
+5.1 Any Blackridge operating system or firmware is licensed, not sold.
+
+5.2 Installation on unauthorized hardware is prohibited.
+
+5.3 You may not modify kernel components, system libraries, or bootloaders.
+
+5.4 Circumvention of hardware restrictions voids all rights under this Agreement.
+
+6. SINGLE-BOARD COMPUTER & HARDWARE TERMS
+
+6.1 Hardware purchase does not grant ownership of embedded software.
+
+6.2 Tampering with firmware or bypassing hardware security features is prohibited.
+
+6.3 Blackridge is not liable for hardware damage caused by unauthorized modification.
+
+7. GAMING HUB & ONLINE SERVICES
+
+7.1 Blackridge may suspend or terminate accounts at any time.
+
+7.2 Virtual items have no real-world monetary value unless explicitly stated.
+
+7.3 Exploits, cheating, automation, and manipulation are strictly prohibited.
+
+7.4 Service uptime is not guaranteed.
+
+8. USER DATA & PRIVACY
+
+8.1 Blackridge may collect technical, diagnostic, and usage data.
+
+8.2 You are responsible for safeguarding your account credentials.
+
+8.3 Blackridge is not liable for unauthorized account access.
+
+9. NO WARRANTY
+
+THE SOFTWARE AND SERVICES ARE PROVIDED “AS IS” AND “AS AVAILABLE” WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO:
+
+MERCHANTABILITY
+
+FITNESS FOR A PARTICULAR PURPOSE
+
+NON-INFRINGEMENT
+
+ACCURACY
+
+RELIABILITY
+
+SECURITY
+
+BLACKRIDGE DOES NOT GUARANTEE ERROR-FREE OR UNINTERRUPTED OPERATION.
+
+10. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW:
+
+10.1 Blackridge shall not be liable for:
+
+Data loss
+
+Hardware damage
+
+Lost profits
+
+Business interruption
+
+Security breaches
+
+Indirect or consequential damages
+
+10.2 Total liability shall not exceed $100 USD or the amount paid for the specific product, whichever is lower.
+
+11. INDEMNIFICATION
+
+You agree to indemnify and hold harmless Blackridge from any claims, damages, losses, or legal fees arising from:
+
+Your misuse of the Software
+
+Violation of this Agreement
+
+Third-party claims resulting from your actions
+
+12. TERMINATION
+
+12.1 Blackridge may terminate this Agreement at any time without notice.
+
+12.2 Upon termination, you must immediately:
+
+Cease all use
+
+Delete all copies
+
+Destroy any stored components
+
+13. EXPORT COMPLIANCE
+
+You agree to comply with all U.S. export laws and regulations.
+
+14. GOVERNING LAW
+
+This Agreement shall be governed by the laws of the United States and the State of [Insert State], without regard to conflict-of-law principles.
+
+All disputes shall be resolved exclusively in courts located within said jurisdiction.
+
+15. CLASS ACTION WAIVER
+
+You agree that any disputes will be resolved individually and not as part of a class action lawsuit.
+
+16. MODIFICATIONS TO AGREEMENT
+
+Blackridge reserves the right to modify this Agreement at any time. Continued use after changes constitutes acceptance.
+
+17. SEVERABILITY
+
+If any provision is deemed unenforceable, the remaining provisions remain in full effect.
+
+18. ENTIRE AGREEMENT
+
+This Agreement constitutes the entire agreement between you and Blackridge Network and supersedes all prior agreements.
+
+ACKNOWLEDGMENT
+
+BY USING ANY BLACKRIDGE NETWORK SOFTWARE, HARDWARE, OR SERVICES, YOU ACKNOWLEDGE THAT YOU HAVE READ, UNDERSTOOD, AND AGREE TO BE BOUND BY THIS AGREEMENT.
